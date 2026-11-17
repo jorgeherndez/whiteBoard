@@ -341,6 +341,16 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   };
 
   const wheelRef = useRef({ t: 0, pad: false });
+  // la app gestiona el zoom: el navegador interno nunca debe ampliar toda la ventana
+  useEffect(() => {
+    const noWheel = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
+    const noKeys = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && ["+", "=", "-", "0"].includes(e.key)) e.preventDefault();
+    };
+    document.addEventListener("wheel", noWheel, { passive: false, capture: true });
+    window.addEventListener("keydown", noKeys, true);
+    return () => { document.removeEventListener("wheel", noWheel, { capture: true }); window.removeEventListener("keydown", noKeys, true); };
+  }, []);
   useEffect(() => {
     const el = viewport.current!;
     const onWheel = (e: WheelEvent) => {
@@ -703,6 +713,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (mod && e.key.toLowerCase() === "e") { e.preventDefault(); if (!newShape) { setEditing(null); openNewShape(true); } return; }
       if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); setSearch((s) => s ?? { q: "", idx: 0 }); setTimeout(() => (document.querySelector(".search-input") as HTMLInputElement | null)?.select(), 0); return; }
       if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); doSave(); return; }
+      // zoom con teclado (antes que nada: en teclado español «+» comparte tecla con «]»)
+      if (mod && (e.key === "+" || e.key === "=" || e.code === "NumpadAdd")) { e.preventDefault(); zoomCenter(1.2); return; }
+      if (mod && (e.key === "-" || e.code === "NumpadSubtract")) { e.preventDefault(); zoomCenter(1 / 1.2); return; }
+      if (mod && (e.key === "0" || e.code === "Numpad0")) { e.preventDefault(); fit(); return; }
       if (e.key === "Escape") { setEditing(null); if (!inField) { setTool("hand"); setSelIds([]); setShowKeys(false); } return; }
       if (inField) return;
       const k = e.key.toLowerCase();
@@ -710,8 +724,8 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (mod && k === "d") { e.preventDefault(); duplicateSel(); return; }
       if (mod && k === "g") { e.preventDefault(); e.shiftKey ? ungroup(selIds) : group(selIds); return; }
       if (mod && k === "l") { e.preventDefault(); toggleLock(selIds); return; }
-      if (mod && (e.key === "]" || e.code === "BracketRight")) { e.preventDefault(); reorder(selIds, true); return; }
-      if (mod && (e.key === "[" || e.code === "BracketLeft")) { e.preventDefault(); reorder(selIds, false); return; }
+      if (mod && e.key === "]") { e.preventDefault(); reorder(selIds, true); return; }
+      if (mod && e.key === "[") { e.preventDefault(); reorder(selIds, false); return; }
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
       else if (!mod && !e.altKey && k === "h") setTool("hand");
@@ -721,9 +735,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       else if ((e.key === "Delete" || e.key === "Backspace") && selDiv) requestDeleteDivider(selDiv.id, selDiv.idx);
       else if (e.key === "Delete" || e.key === "Backspace") removeSelected();
       else if (e.key === "Enter" && selected) { const it = stateRef.current?.items.find((i) => i.id === selected); if (it && (it.type === "text" || it.type === "postit")) { e.preventDefault(); setEditing(selected); } }
-      else if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); zoomCenter(1.2); }
-      else if (mod && e.key === "-") { e.preventDefault(); zoomCenter(1 / 1.2); }
-      else if (mod && e.key === "0") { e.preventDefault(); fit(); }
+
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
