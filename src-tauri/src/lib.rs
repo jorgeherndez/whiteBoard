@@ -118,6 +118,8 @@ fn copy_dir(app: tauri::AppHandle, from: String, to: String) -> Result<(), Strin
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             root_path, list_dir, read_text, write_text, write_base64, read_base64, remove_path, copy_dir
         ])
