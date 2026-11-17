@@ -761,9 +761,9 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
 
         <div className="pill tools">
           <button className={`tool icon-only ${tool === "hand" ? "on" : ""}`} title="Mano: arrastra el fondo para moverte y los elementos para moverlos (H)" aria-label="Mano" onClick={() => setTool("hand")}>
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.2 8.6V3.4a1 1 0 012 0v4.2M7.2 7.4V2.4a1 1 0 012 0v5M9.2 7.4V3.2a1 1 0 012 0v4.6M11.2 7.8V5.2a1 1 0 012 0v4.6c0 2.6-1.9 4.7-4.6 4.7-1.6 0-2.8-.7-3.7-2l-2.2-3.3a1 1 0 011.5-1.3l1 1" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.2 8.6V3.4a1 1 0 012 0v4.2M7.2 7.4V2.4a1 1 0 012 0v5M9.2 7.4V3.2a1 1 0 012 0v4.6M11.2 7.8V5.2a1 1 0 012 0v4.6c0 2.6-1.9 4.7-4.6 4.7-1.6 0-2.8-.7-3.7-2l-2.2-3.3a1 1 0 011.5-1.3l1 1" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
           <button className={`tool icon-only ${tool === "select" ? "on" : ""}`} title="Selección: arrastra el fondo para seleccionar varios (V)" aria-label="Selección" onClick={() => setTool("select")}>
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 2.5l8.5 4.2-3.7 1.1-1.4 3.6z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><path d="M9.5 10.5h4M11.5 13.5h2v-2M2.5 13.5h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeDasharray="1.4 1.6" /></svg></button>
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 2.5l8.5 4.2-3.7 1.1-1.4 3.6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M9.5 10.5h4M11.5 13.5h2v-2M2.5 13.5h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="1.4 1.6" /></svg></button>
           <div className="sep" />
           <button className="tool" title="Texto (T)" onClick={() => addText()}><span className="t-ico">Aa</span>Texto</button>
           <div className="sep" />
