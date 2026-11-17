@@ -3,12 +3,14 @@ import type { Editor } from "@tiptap/react";
 import RichText from "./RichText";
 import NewPostitDialog, { NewPostit } from "./NewPostitDialog";
 import NewShapeDialog, { NewShape } from "./NewShapeDialog";
-import { SHAPE_COLORS, addNode, isLineKind, isStrokeKind, shapeDefaults, shapeSvg } from "./shapes";
+import NewObjectDialog, { NewObject } from "./NewObjectDialog";
+import ObjectPanel from "./ObjectPanel";
+import { CARDS, SHAPE_COLORS, addNode, cardSvg, isLineKind, isStrokeKind, shapeDefaults, shapeSvg } from "./shapes";
 import { SIDES, anchor, connectable, nearestAnchor, resolveLines, worldBox } from "./connect";
 import { fsx } from "./storage";
 import {
   BoardFile, BoardState, Camera, Item, POSTIT_COLORS, POSTIT_SIZES, SHEET_MIN, Sheet,
-  Side, cleanOrphanImages, imageUrl, loadBoard, saveBoard, storeImage, uid,
+  ObjClass, Side, cleanOrphanImages, imageUrl, loadBoard, objectAttrs, saveBoard, storeImage, uid,
 } from "./model";
 
 // portapapeles interno (sirve entre pizarras)
@@ -19,7 +21,7 @@ export const PEN_COLORS = ["#1d1d1f", "#1f5fd6", "#1e9e48", "#e5322d"];
 export const PEN_SIZES = [3, 6, 12];
 
 const norm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-const itemText = (it: Item) => [it.name, it.content, ...(it.segments ?? []).map((s) => s.label)].filter(Boolean).join(" \n ");
+const itemText = (it: Item) => [it.name, it.content, ...(it.segments ?? []).map((s) => s.label), ...(it.attrs ?? []).map((a) => `${a.key} ${a.value}`)].filter(Boolean).join(" \n ");
 
 const MIN_Z = 0.05, MAX_Z = 8;
 const clampZ = (z: number) => Math.min(MAX_Z, Math.max(MIN_Z, z));
@@ -76,6 +78,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const [lifted, setLifted] = useState<Set<string>>(new Set());
   const [newPostit, setNewPostit] = useState<{ screen: { x: number; y: number }; world?: { x: number; y: number } } | null>(null);
   const [newShape, setNewShape] = useState<{ screen: { x: number; y: number }; world?: { x: number; y: number } } | null>(null);
+  const [newObject, setNewObject] = useState<{ screen: { x: number; y: number }; world?: { x: number; y: number } } | null>(null);
   const [segPop, setSegPop] = useState<{ id: string; idx: number; x: number; y: number } | null>(null);
   const [selDiv, setSelDiv] = useState<{ id: string; idx: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ id: string; idx: number; x: number; y: number } | null>(null);
@@ -216,6 +219,27 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     if (s.kind === "text") return addItem({ type: "text", w: 360, h: 120, content: "", name: s.name || undefined }, at);
     const d = shapeDefaults(s.kind);
     addItem({ type: "shape", shape: s.kind, color: s.color, name: s.name || undefined, w: d.w, h: d.h, points: d.points }, at);
+  };
+  const openNewObject = (fromMouse: boolean) => {
+    const vp = viewport.current!.getBoundingClientRect();
+    if (fromMouse && mouseScreen.current && mouse.current) setNewObject({ screen: mouseScreen.current, world: mouse.current });
+    else setNewObject({ screen: { x: vp.width / 2 - 180, y: vp.height / 2 - 200 } });
+  };
+  const createObject = (o: NewObject, at?: { x: number; y: number }) => {
+    const st = stateRef.current!;
+    let classes = st.classes ?? [], classId = o.classId;
+    if (o.newClass) { const c = { id: uid(), name: o.newClass.name, description: o.newClass.description, color: o.color, attrs: [] }; classes = [...classes, c]; classId = c.id; }
+    const n = st.items.filter((i) => i.type === "object").length + 1;
+    const cls = classes.find((c) => c.id === classId);
+    const c = at ?? viewCenter();
+    const item: Item = { id: uid(), type: "object", name: o.name || (cls ? `${cls.name} ${n}` : `Objeto ${n}`), color: o.color, classId, x: c.x - 75, y: c.y - 75, w: 150, h: 150 };
+    commit({ ...st, classes, items: [...st.items, item] });
+    setTool("hand");
+    setSelected(item.id);
+  };
+  const updateObject = (id: string, patch?: Partial<Item>, classes?: ObjClass[]) => {
+    const s = stateRef.current!;
+    commit({ ...s, classes: classes ?? s.classes, items: patch ? s.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) : s.items });
   };
   const createPostit = (p: NewPostit, at?: { x: number; y: number }) => {
     const s = POSTIT_SIZES[p.size];
@@ -575,7 +599,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const onResizeDown = (e: React.PointerEvent, it: Item) => {
     e.stopPropagation();
     viewport.current!.setPointerCapture(e.pointerId);
-    drag.current = { kind: "resize", id: it.id, sx: e.clientX, sy: e.clientY, ow: it.w, oh: it.h, ratio: it.type === "image" ? it.h / it.w : undefined, base: stateRef.current! };
+    drag.current = { kind: "resize", id: it.id, sx: e.clientX, sy: e.clientY, ow: it.w, oh: it.h, ratio: it.type === "image" || it.type === "object" ? it.h / it.w : undefined, base: stateRef.current! };
   };
 
   const onNodeDown = (e: React.PointerEvent, it: Item, idx: number) => {
@@ -594,8 +618,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     if (e.button !== 0) return;
     const base = stateRef.current!;
     const a = anchor(it, side);
-    const arrow: Item = { id: uid(), type: "shape", shape: "arrow", color: "#1d1d1f", x: a.x, y: a.y, w: 0, h: 0,
-      points: [{ x: 0, y: 0 }, { x: 0, y: 0 }], startConn: { id: it.id, side } };
+    // desde un objeto sale una relación (uno a muchos por defecto); desde el resto, una flecha
+    const rel = it.type === "object";
+    const arrow: Item = { id: uid(), type: "shape", shape: rel ? "relation" : "arrow", color: rel ? "#3a3a3c" : "#1d1d1f", x: a.x, y: a.y, w: 0, h: 0,
+      points: [{ x: 0, y: 0 }, { x: 0, y: 0 }], startConn: { id: it.id, side }, ...(rel ? { startCard: "one" as const, endCard: "many" as const } : {}) };
     const next = { ...base, items: [...base.items, arrow] };
     setState(next);
     stateRef.current = next;
@@ -664,6 +690,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (e.type !== "keydown") return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === "p") { e.preventDefault(); if (!newPostit) { setEditing(null); openNewPostit(true); } return; }
+      if (mod && e.key.toLowerCase() === "o") { e.preventDefault(); if (!newObject) { setEditing(null); openNewObject(true); } return; }
       if (mod && e.key.toLowerCase() === "e") { e.preventDefault(); if (!newShape) { setEditing(null); openNewShape(true); } return; }
       if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); setSearch((s) => s ?? { q: "", idx: 0 }); setTimeout(() => (document.querySelector(".search-input") as HTMLInputElement | null)?.select(), 0); return; }
       if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); doSave(); return; }
@@ -770,6 +797,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           <button className="tool" title="Nuevo post-it (Ctrl+P)" onClick={() => openNewPostit(false)}><span className="pi-ico l" style={{ background: POSTIT_COLORS[0] }} />Post-it</button>
           <div className="sep" />
           <button className="tool" title="Nueva forma (Ctrl+E)" onClick={() => openNewShape(false)}><span className="t-ico">◇</span>Forma</button>
+          <button className="tool" title="Nuevo objeto (Ctrl+O)" onClick={() => openNewObject(false)}><span className="obj-ico" />Objeto</button>
           <button className={`tool ${tool === "pen" ? "on" : ""}`} title="Rotulador (B · Esc para salir)" onClick={() => setTool((t) => (t === "pen" ? "hand" : "pen"))}>
             <svg width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3-7.5 7.5H3v-3z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M3 13l-.5 1.5" stroke={pen.color} strokeWidth="2.4" strokeLinecap="round" /></svg>Rotulador</button>
           <button className={`tool ${tool === "eraser" ? "on" : ""}`} title="Goma: borra trazos del rotulador (Esc para salir)" onClick={() => setTool((t) => (t === "eraser" ? "hand" : "eraser"))}>
@@ -862,6 +890,16 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           {SHAPE_COLORS.map((c) => (
             <button key={c} className={`swatch ${c === sel.color ? "on" : ""}`} style={{ background: c, margin: "0 2px" }} onClick={() => updateItem(sel.id, { color: c })} />
           ))}
+          {sel.shape === "relation" && (["startCard", "endCard"] as const).map((end) => (
+            <span key={end} className="card-pick"><div className="sep" />
+              <span className="bar-label">{end === "startCard" ? "Origen" : "Destino"}</span>
+              {CARDS.map((c) => (
+                <button key={c.card} className={`fmt card-btn ${(sel[end] ?? (end === "startCard" ? "one" : "many")) === c.card ? "on" : ""}`} title={c.label}
+                  onClick={() => updateItem(sel.id, { [end]: c.card })}
+                  dangerouslySetInnerHTML={{ __html: `<svg width="30" height="20" viewBox="0 0 30 20"><path d="M4 10H30" stroke="currentColor" stroke-width="2"/>${cardSvg(c.card, { x: 4, y: 10 }, { x: 30, y: 10 }, "currentColor")}</svg>` }} />
+              ))}
+            </span>
+          ))}
           {sel.shape === "curve" && sel.points && (<>
             <div className="sep" />
             <button className="fmt" style={{ padding: "0 10px" }} onClick={() => updateItem(sel.id, { points: addNode(sel.points!) })}>＋ Nodo</button>
@@ -912,6 +950,11 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           <button className="fmt" style={{ padding: "0 10px" }} onClick={() => setEditing(sel.id)}>Editar</button>
           <button className={`fmt ${sel.pinned ? "on" : ""}`} style={{ padding: "0 10px" }} onClick={() => togglePin([sel.id])} title="Siempre por encima del resto">Siempre al frente</button>
         </div>
+      )}
+
+      {/* ficha del objeto seleccionado */}
+      {!penOn && !activeEditor && sel?.type === "object" && selIds.length === 1 && (
+        <ObjectPanel key={sel.id} item={sel} classes={state?.classes ?? []} classUsers={view.filter((i) => i.type === "object" && i.classId && i.classId === sel.classId).length} update={(p, c) => updateObject(sel.id, p, c)} onClose={() => setSelIds([])} />
       )}
 
       {/* lienzo */}
@@ -980,9 +1023,13 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
                       );
                     })}
                   </div>
+                ) : it.type === "object" ? (
+                  <ObjectCircle it={it} classes={state.classes ?? []} />
                 ) : it.type === "shape" ? (<>
                   <div dangerouslySetInnerHTML={{ __html: shapeSvg(it) }} />
-                  {it.name && <div className="shape-name">{it.name}</div>}
+                  {it.name && (it.shape === "relation" && it.points?.length
+                    ? <div className="shape-name rel" style={{ left: (it.points[0].x + it.points[it.points.length - 1].x) / 2, top: (it.points[0].y + it.points[it.points.length - 1].y) / 2 }}>{it.name}</div>
+                    : <div className="shape-name">{it.name}</div>)}
                   {selected === it.id && it.points?.map((p, i) => (
                     <div key={i} className="node" style={{ left: p.x, top: p.y }} onPointerDown={(e) => onNodeDown(e, it, i)} />
                   ))}
@@ -1095,6 +1142,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         <NewShapeDialog anchor={newShape.screen} onClose={() => setNewShape(null)}
           onCreate={(sh) => { const at = newShape.world; setNewShape(null); createShape(sh, at); }} />
       )}
+      {newObject && (
+        <NewObjectDialog anchor={newObject.screen} classes={state?.classes ?? []} onClose={() => setNewObject(null)}
+          onCreate={(o) => { const at = newObject.world; setNewObject(null); createObject(o, at); }} />
+      )}
       {newPostit && (
         <NewPostitDialog defaultName={nextDefaultName()} anchor={newPostit.screen}
           onClose={() => setNewPostit(null)}
@@ -1111,7 +1162,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           </button>
           <div className="np-seg-title">Atajos</div>
           {[
-            ["Crear", [["Ctrl+P", "Post-it"], ["Ctrl+E", "Forma"], ["T", "Texto"], ["Ctrl+V", "Pegar imagen o elementos"]]],
+            ["Crear", [["Ctrl+P", "Post-it"], ["Ctrl+E", "Forma"], ["Ctrl+O", "Objeto"], ["T", "Texto"], ["Ctrl+V", "Pegar imagen o elementos"]]],
             ["Editar", [["Ctrl+Z / Ctrl+Y", "Deshacer / rehacer"], ["Ctrl+C / X / D", "Copiar / cortar / duplicar"], ["Supr", "Eliminar"], ["Intro / Esc", "Editar / terminar"], ["Doble clic", "Editar texto"]]],
             ["Organizar", [["Ctrl+A", "Seleccionar todo"], ["Mayús+clic", "Añadir a la selección"], ["Ctrl+G", "Agrupar (Mayús: desagrupar)"], ["Ctrl+L", "Bloquear"], ["Ctrl+] / Ctrl+[", "Al frente / atrás"], ["Alt al mover", "Sin guías"]]],
             ["Herramientas", [["H", "Mano (mover el lienzo)"], ["V", "Selección (recuadro)"], ["B", "Rotulador"], ["Mayús+arrastrar", "Recuadro con la mano"], ["Esc", "Volver a la mano"]]],
@@ -1196,6 +1247,21 @@ function FormatBar({ editor }: { editor: Editor }) {
       {b("1.", editor.isActive("orderedList"), () => c().toggleOrderedList().run(), "Lista numerada (1. )")}
       {b("☑", editor.isActive("taskList"), () => c().toggleTaskList().run(), "Tareas ([ ] )")}
       {b("❝", editor.isActive("blockquote"), () => c().toggleBlockquote().run(), "Cita (> )")}
+    </div>
+  );
+}
+
+/** Objeto: círculo con nombre (visible u oculto), clase y, si se quiere, sus atributos */
+function ObjectCircle({ it, classes }: { it: Item; classes: ObjClass[] }) {
+  const cls = classes.find((c) => c.id === it.classId);
+  const attrs = it.showAttrs ? objectAttrs(it, classes) : [];
+  return (
+    <div className="obj-circle" style={{ "--oc": it.color ?? "#0071e3" } as React.CSSProperties} title={cls?.description || undefined}>
+      {cls && <div className="obj-class">{cls.name}</div>}
+      {!it.hideName && <div className="obj-name">{it.name}</div>}
+      {attrs.length > 0 && (
+        <div className="obj-attrs">{attrs.map((a) => <div key={a.key}><b>{a.key}</b>{a.value ? `: ${a.value}` : ""}</div>)}</div>
+      )}
     </div>
   );
 }

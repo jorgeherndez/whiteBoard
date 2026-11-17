@@ -3,7 +3,7 @@ import { fsx } from "./storage";
 import { shapeSvg } from "./shapes";
 import type { ShapeKind, Pt } from "./shapes";
 
-export type ItemType = "text" | "postit" | "image" | "shape" | "timeline";
+export type ItemType = "text" | "postit" | "image" | "shape" | "timeline" | "object";
 
 export interface Item {
   id: string;
@@ -28,11 +28,24 @@ export interface Item {
   titlePos?: "top" | "bottom" | "none";
   dividers?: number[]; // posiciones de las líneas verticales (0..1)
   segments?: Segment[]; // una más que dividers
+  // objetos (círculos)
+  classId?: string; // clase a la que pertenece
+  attrs?: Attr[]; // valores de atributos (los de la clase y los propios)
+  hideName?: boolean; // nombre oculto
+  showAttrs?: boolean; // mostrar los atributos dentro del círculo
+  // relaciones: símbolo en cada extremo
+  startCard?: Card;
+  endCard?: Card;
   file?: string; // imágenes: nombre dentro de imagenes/
   content?: string; // textos y post-its: markdown (se guarda en .md aparte)
 }
 
 export type Side = "t" | "r" | "b" | "l";
+export interface Attr { key: string; value: string }
+/** Cardinalidad de un extremo de relación (notación pata de gallo) */
+export type Card = "none" | "one" | "zeroOne" | "many" | "oneMany" | "zeroMany" | "arrow";
+/** Clase reutilizable de objetos: nombre, descripción y atributos que comparten */
+export interface ObjClass { id: string; name: string; description: string; color: string; attrs: string[] }
 export interface Conn { id: string; side: Side }
 
 export interface Segment { color: string; label?: string; textColor?: string }
@@ -54,11 +67,12 @@ export interface BoardFile extends BoardMeta {
   sheet: Sheet;
   camera?: Camera;
   items: Omit<Item, "content">[];
+  classes?: ObjClass[];
 }
 
 export interface BoardSummary extends BoardMeta { dir: string; itemCount: number }
 
-export interface BoardState { sheet: Sheet; items: Item[] }
+export interface BoardState { sheet: Sheet; items: Item[]; classes?: ObjClass[] }
 
 export const POSTIT_COLORS = ["#ffe066", "#ffadad", "#a0e7a0", "#9bd0ff", "#d7b8ff", "#ffc78f"];
 export const POSTIT_SIZES = { s: 180, l: 280 };
@@ -126,7 +140,7 @@ export async function loadBoard(dir: string): Promise<{ file: BoardFile; state: 
     if (it.type === "text" || it.type === "postit") item.content = (await fsx.readText(contentPath(dir, item))) ?? "";
     items.push(item);
   }
-  return { file, state: { sheet: file.sheet, items } };
+  return { file, state: { sheet: file.sheet, items, classes: file.classes ?? [] } };
 }
 
 /** Guarda board.json y los .md que hayan cambiado. `saved` recuerda lo último escrito. */
@@ -134,8 +148,8 @@ export async function saveBoard(dir: string, meta: BoardMeta, state: BoardState,
   const current = new Map<string, string>();
   for (const it of state.items) {
     if (it.type === "image" || it.type === "timeline") continue;
-    const p = it.type === "shape" ? `${dir}/formas/${it.id}.svg` : contentPath(dir, it);
-    const c = it.type === "shape" ? shapeSvg(it, true) : it.content ?? "";
+    const p = it.type === "shape" ? `${dir}/formas/${it.id}.svg` : it.type === "object" ? `${dir}/objetos/${it.id}.md` : contentPath(dir, it);
+    const c = it.type === "shape" ? shapeSvg(it, true) : it.type === "object" ? objectMarkdown(it, state.classes ?? []) : it.content ?? "";
     current.set(p, c);
     if (saved.get(p) !== c) await fsx.writeText(p, c);
   }
@@ -147,6 +161,7 @@ export async function saveBoard(dir: string, meta: BoardMeta, state: BoardState,
     updatedAt: new Date().toISOString(),
     sheet: state.sheet,
     camera,
+    classes: state.classes ?? [],
     items: state.items.map(({ content: _c, ...rest }) => rest),
   };
   await fsx.writeText(`${dir}/board.json`, JSON.stringify(file, null, 2));
@@ -189,4 +204,22 @@ export async function storeImage(dir: string, f: File): Promise<{ file: string; 
     im.src = url;
   });
   return { file, url, ...dims };
+}
+
+/** Atributos de un objeto en orden: primero los de su clase, después los propios */
+export function objectAttrs(it: Item, classes: ObjClass[]): (Attr & { fromClass: boolean })[] {
+  const cls = classes.find((c) => c.id === it.classId);
+  const own = it.attrs ?? [];
+  const out = (cls?.attrs ?? []).map((k) => ({ key: k, value: own.find((a) => a.key === k)?.value ?? "", fromClass: true }));
+  for (const a of own) if (!cls?.attrs.includes(a.key)) out.push({ ...a, fromClass: false });
+  return out;
+}
+
+/** Ficha legible del objeto (objetos/<id>.md) */
+export function objectMarkdown(it: Item, classes: ObjClass[]): string {
+  const cls = classes.find((c) => c.id === it.classId);
+  const lines = [`# ${it.name || "Objeto"}`, ""];
+  if (cls) lines.push(`Clase: **${cls.name}**${cls.description ? ` — ${cls.description}` : ""}`, "");
+  for (const a of objectAttrs(it, classes)) lines.push(`- ${a.key}: ${a.value}`);
+  return lines.join("\n") + "\n";
 }

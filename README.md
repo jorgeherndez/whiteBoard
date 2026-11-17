@@ -8,6 +8,7 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 - **Lienzo infinito**: fondo gris con una hoja blanca inicial de 1920×1080 que puedes agrandar arrastrando su borde derecho, inferior o la esquina. Rueda del ratón = zoom. Por defecto el ratón es la **mano**: arrastrar el fondo mueve el lienzo y arrastrar un elemento lo mueve. Tras crear cualquier cosa se vuelve a la mano.
 - **Texto** con formato estilo Obsidian: `# ` títulos, `**negrita**`, `*cursiva*`, `- ` listas, `1. `, `[ ] ` tareas, `> ` citas. Barra de formato al editar.
 - **Post-its** de 6 colores y 2 tamaños. Se pueden **levantar** con la esquina inferior derecha para ver lo que hay debajo (siguen pegados por arriba).
+- **Objetos y relaciones** (Ctrl+O): círculos con nombre (visible u oculto), atributos y clase. Las **clases** (nombre, descripción, atributos y color) se reutilizan entre objetos de la pizarra. Arrastrar desde un punto de un objeto crea una **relación** con símbolos de cardinalidad (uno, cero o uno, muchos, uno o muchos, cero o muchos, flecha) en cada extremo.
 - **Imágenes**: botón Imagen, arrastrar archivos o pegar (Ctrl+V).
 - **Deshacer / rehacer** (botones y Ctrl+Z / Ctrl+Y) y **guardado automático** (punto verde = guardado; Ctrl+S fuerza el guardado).
 
@@ -16,6 +17,7 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 | Tecla | Acción |
 |---|---|
 | Ctrl+P | Nuevo post-it donde está el ratón (panel: nombre, tamaño y color; Intro = crear) |
+| Ctrl+O | Nuevo objeto donde está el ratón |
 | Ctrl+E | Nueva forma donde está el ratón (flechas, líneas, curvas, figuras, campo de texto, timeline) |
 | Ctrl+F | Buscar texto en la pizarra (Intro = siguiente) |
 | T | Texto donde está el ratón |
@@ -50,6 +52,7 @@ postits/<id>.md   texto de cada post-it (markdown)
 textos/<id>.md    cada bloque de texto (markdown)
 imagenes/         las imágenes usadas
 formas/<id>.svg   cada forma/flecha como SVG
+objetos/<id>.md   ficha legible de cada objeto (clase y atributos)
 ```
 
 ## Descargar el instalador

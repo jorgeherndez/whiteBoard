@@ -1,13 +1,14 @@
 // Figuras: se dibujan como SVG y además se guardan como archivo .svg en formas/
-import type { Item } from "./model";
+import type { Card, Item } from "./model";
 
-export type ShapeKind = "rect" | "rounded" | "ellipse" | "triangle" | "diamond" | "line" | "arrow" | "arrow2" | "curve" | "pen";
+export type ShapeKind = "rect" | "rounded" | "ellipse" | "triangle" | "diamond" | "line" | "arrow" | "arrow2" | "curve" | "pen" | "relation";
 
 export const SHAPES: { kind: ShapeKind; label: string }[] = [
   { kind: "arrow", label: "Flecha" },
   { kind: "arrow2", label: "Flecha doble" },
   { kind: "curve", label: "Flecha curva (con nodos)" },
   { kind: "line", label: "Línea" },
+  { kind: "relation", label: "Relación (1 a muchos…)" },
   { kind: "rect", label: "Rectángulo" },
   { kind: "rounded", label: "Rectángulo redondeado" },
   { kind: "ellipse", label: "Elipse" },
@@ -18,7 +19,7 @@ export const SHAPES: { kind: ShapeKind; label: string }[] = [
 export const SHAPE_COLORS = ["#1d1d1f", "#8e8e93", "#0071e3", "#ff3b30", "#34c759", "#ff9f0a", "#af52de", "#ffe066"];
 
 export const isStrokeKind = (k?: ShapeKind) => k === "pen" || isLineKind(k);
-export const isLineKind = (k?: ShapeKind) => k === "line" || k === "arrow" || k === "arrow2" || k === "curve";
+export const isLineKind = (k?: ShapeKind) => k === "line" || k === "arrow" || k === "arrow2" || k === "curve" || k === "relation";
 
 export interface Pt { x: number; y: number }
 
@@ -50,7 +51,7 @@ function head(tip: Pt, from: Pt, color: string, sw: number) {
 
 /** SVG en coordenadas locales del elemento. `standalone` añade viewBox para el archivo .svg */
 export function shapeSvg(it: Item, standalone = false): string {
-  const c = it.color ?? "#1d1d1f", sw = 3, k = it.shape as ShapeKind;
+  const k = it.shape as ShapeKind, c = it.color ?? "#1d1d1f", sw = k === "relation" ? 2 : 3;
   let body = "";
   if (k === "pen") {
     const p = (it.points ?? []) as Pt[], w = it.strokeWidth ?? 4;
@@ -68,6 +69,10 @@ export function shapeSvg(it: Item, standalone = false): string {
     const n = p.length;
     if (k === "arrow" || k === "arrow2" || k === "curve") body += head(p[n - 1], k === "curve" ? lerpBack(p) : p[n - 2], c, sw);
     if (k === "arrow2") body += head(p[0], p[1], c, sw);
+    if (k === "relation" && n > 1) {
+      body += cardSvg(it.startCard ?? "one", p[0], p[1], c);
+      body += cardSvg(it.endCard ?? "many", p[n - 1], p[n - 2], c);
+    }
   } else {
     const w = it.w, h = it.h, i = sw / 2;
     const fill = `${c}1f`;
@@ -83,6 +88,37 @@ export function shapeSvg(it: Item, standalone = false): string {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.x - 12} ${b.y - 12} ${b.w + 24} ${b.h + 24}" width="${b.w + 24}" height="${b.h + 24}">${body}</svg>\n`;
   }
   return `<svg class="shape-svg" width="${Math.max(1, it.w)}" height="${Math.max(1, it.h)}" overflow="visible">${body}</svg>`;
+}
+
+export const CARDS: { card: Card; label: string }[] = [
+  { card: "one", label: "Uno" },
+  { card: "zeroOne", label: "Cero o uno" },
+  { card: "many", label: "Muchos" },
+  { card: "oneMany", label: "Uno o muchos" },
+  { card: "zeroMany", label: "Cero o muchos" },
+  { card: "arrow", label: "Flecha" },
+  { card: "none", label: "Nada" },
+];
+
+/** Símbolo de cardinalidad (pata de gallo) en el extremo `tip`, mirando hacia `from` */
+export function cardSvg(card: Card, tip: Pt, from: Pt, color: string): string {
+  if (card === "none") return "";
+  if (card === "arrow") return head(tip, from, color, 2);
+  const len = Math.hypot(from.x - tip.x, from.y - tip.y) || 1;
+  const ux = (from.x - tip.x) / len, uy = (from.y - tip.y) / len; // hacia dentro de la línea
+  const nx = -uy, ny = ux; // perpendicular
+  const at = (d: number, o = 0) => ({ x: tip.x + ux * d + nx * o, y: tip.y + uy * d + ny * o });
+  const seg = (a: Pt, b: Pt) => `<path d="M${a.x},${a.y} L${b.x},${b.y}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
+  const bar = (d: number) => seg(at(d, -8), at(d, 8));
+  const circle = (d: number) => { const q = at(d); return `<circle cx="${q.x}" cy="${q.y}" r="5" fill="#fff" stroke="${color}" stroke-width="2"/>`; };
+  const crow = () => seg(at(0, -9), at(14)) + seg(at(0, 9), at(14)) + seg(at(0), at(14));
+  let out = "";
+  if (card === "one") out = bar(8) + bar(14);
+  if (card === "zeroOne") out = bar(9) + circle(21);
+  if (card === "many") out = crow();
+  if (card === "oneMany") out = crow() + bar(19);
+  if (card === "zeroMany") out = crow() + circle(24);
+  return out;
 }
 
 // la punta de la curva se orienta según la tangente final
