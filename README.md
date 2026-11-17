@@ -16,7 +16,7 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 | Tecla | Acción |
 |---|---|
 | Ctrl+P | Nuevo post-it donde está el ratón (abre el panel: nombre, tamaño y color; Intro = crear) |
-| Ctrl+F | Nueva forma donde está el ratón (flechas, líneas, curvas con nodos, figuras, campo de texto) |
+| Ctrl+F | Nueva forma donde está el ratón (flechas, líneas, curvas con nodos, figuras, campo de texto, timeline) |
 | T | Texto donde está el ratón |
 | Ctrl+Z, Ctrl+Y | Deshacer, rehacer |
 | Ctrl+S | Guardar ya |

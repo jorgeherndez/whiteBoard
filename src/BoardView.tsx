@@ -16,6 +16,7 @@ type Drag =
   | { kind: "pan"; sx: number; sy: number; cam: Camera }
   | { kind: "move"; id: string; sx: number; sy: number; ox: number; oy: number; base: BoardState }
   | { kind: "node"; id: string; idx: number; sx: number; sy: number; ox: number; oy: number; base: BoardState }
+  | { kind: "divider"; id: string; idx: number; sx: number; sy: number; ox: number; base: BoardState }
   | { kind: "resize"; id: string; sx: number; sy: number; ow: number; oh: number; ratio?: number; base: BoardState }
   | { kind: "sheet"; edge: "r" | "b" | "rb"; sx: number; sy: number; ow: number; oh: number; base: BoardState };
 
@@ -28,6 +29,8 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const [lifted, setLifted] = useState<Set<string>>(new Set());
   const [newPostit, setNewPostit] = useState<{ screen: { x: number; y: number }; world?: { x: number; y: number } } | null>(null);
   const [newShape, setNewShape] = useState<{ screen: { x: number; y: number }; world?: { x: number; y: number } } | null>(null);
+  const [segPop, setSegPop] = useState<{ id: string; idx: number; x: number; y: number } | null>(null);
+  const downAt = useRef({ x: 0, y: 0, sel: false });
   const mouseScreen = useRef<{ x: number; y: number } | null>(null);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [saveStatus, setSaveStatus] = useState<"saved" | "pending" | "saving" | "error">("saved");
@@ -152,6 +155,8 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     else setNewShape({ screen: { x: vp.width / 2 - 180, y: vp.height / 2 - 160 } });
   };
   const createShape = (s: NewShape, at?: { x: number; y: number }) => {
+    if (s.kind === "timeline") return addItem({ type: "timeline", name: s.name || "Timeline", color: s.color, titlePos: "top", w: 900, h: 64,
+      dividers: [1 / 3, 2 / 3], segments: [{ color: "#ffffff" }, { color: "#ffffff" }, { color: "#ffffff" }] }, at);
     if (s.kind === "text") return addItem({ type: "text", w: 360, h: 120, content: "", name: s.name || undefined }, at);
     const d = shapeDefaults(s.kind);
     addItem({ type: "shape", shape: s.kind, color: s.color, name: s.name || undefined, w: d.w, h: d.h, points: d.points }, at);
@@ -232,7 +237,14 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     const dx = (e.clientX - d.sx) / z, dy = (e.clientY - d.sy) / z;
     if (d.kind === "pan") setCam({ ...d.cam, x: d.cam.x + (e.clientX - d.sx), y: d.cam.y + (e.clientY - d.sy) });
     else if (d.kind === "move") updateItem(d.id, { x: Math.round(d.ox + dx), y: Math.round(d.oy + dy) }, false);
-    else if (d.kind === "node") {
+    else if (d.kind === "divider") {
+      const it = stateRef.current!.items.find((i) => i.id === d.id);
+      if (it?.dividers) {
+        const lo = (it.dividers[d.idx - 1] ?? 0) + 0.02, hi = (it.dividers[d.idx + 1] ?? 1) - 0.02;
+        const f = Math.min(hi, Math.max(lo, d.ox + ((e.clientX - d.sx) / z) / it.w));
+        updateItem(d.id, { dividers: it.dividers.map((v, i) => (i === d.idx ? f : v)) }, false);
+      }
+    } else if (d.kind === "node") {
       const it = stateRef.current!.items.find((i) => i.id === d.id);
       if (it?.points) updateItem(d.id, { points: it.points.map((p, i) => (i === d.idx ? { x: Math.round(d.ox + dx), y: Math.round(d.oy + dy) } : p)) }, false);
     } else if (d.kind === "resize") {
@@ -247,9 +259,15 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current;
     drag.current = null;
+    // clic (sin arrastrar) sobre una franja de una timeline ya seleccionada → su submenú
+    if (d?.kind === "move" && downAt.current.sel && Math.hypot(e.clientX - downAt.current.x, e.clientY - downAt.current.y) < 4) {
+      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-seg]") as HTMLElement | null;
+      if (el) setSegPop({ id: d.id, idx: Number(el.dataset.seg), x: e.clientX, y: e.clientY });
+    }
+    downAt.current.sel = false;
     if (!d || d.kind === "pan") return;
     if (stateRef.current !== d.base) {
       past.current.push(d.base);
@@ -293,6 +311,29 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     viewport.current!.setPointerCapture(e.pointerId);
     const p = it.points![idx];
     drag.current = { kind: "node", id: it.id, idx, sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y, base: stateRef.current! };
+  };
+
+  const onDividerDown = (e: React.PointerEvent, it: Item, idx: number) => {
+    e.stopPropagation();
+    viewport.current!.setPointerCapture(e.pointerId);
+    drag.current = { kind: "divider", id: it.id, idx, sx: e.clientX, sy: e.clientY, ox: it.dividers![idx], base: stateRef.current! };
+  };
+  const addStage = (it: Item) => {
+    const d = it.dividers ?? [], segs = it.segments ?? [{ color: "#ffffff" }];
+    const edges = [0, ...d, 1];
+    let best = 0;
+    for (let i = 0; i < edges.length - 1; i++) if (edges[i + 1] - edges[i] > edges[best + 1] - edges[best]) best = i;
+    const mid = (edges[best] + edges[best + 1]) / 2;
+    const nd = [...d]; nd.splice(best, 0, mid);
+    const ns = [...segs]; ns.splice(best + 1, 0, { color: "#ffffff" });
+    updateItem(it.id, { dividers: nd, segments: ns });
+  };
+  const removeStage = (it: Item, idx: number) => {
+    const d = [...(it.dividers ?? [])], segs = [...(it.segments ?? [])];
+    if (segs.length <= 1) return;
+    d.splice(idx === 0 ? 0 : idx - 1, 1);
+    segs.splice(idx, 1);
+    updateItem(it.id, { dividers: d, segments: segs });
   };
 
   const onSheetHandle = (e: React.PointerEvent, edge: "r" | "b" | "rb") => {
@@ -402,6 +443,26 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         </div>
       )}
 
+      {/* ajustes de la timeline seleccionada */}
+      {!activeEditor && sel?.type === "timeline" && (
+        <div className="formatbar pill">
+          <input key={sel.id} className="bar-name" defaultValue={sel.name ?? ""} placeholder="Título"
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v !== (sel.name ?? "")) updateItem(sel.id, { name: v }); }} />
+          <div className="sep" />
+          {(["top", "bottom", "none"] as const).map((k) => (
+            <button key={k} className={`fmt ${(sel.titlePos ?? "top") === k ? "on" : ""}`} style={{ padding: "0 10px" }}
+              onClick={() => updateItem(sel.id, { titlePos: k })}>{{ top: "Título arriba", bottom: "Abajo", none: "Oculto" }[k]}</button>
+          ))}
+          <div className="sep" />
+          {SHAPE_COLORS.slice(0, 6).map((c) => (
+            <button key={c} className={`swatch ${c === sel.color ? "on" : ""}`} style={{ background: c, margin: "0 2px" }} title="Color del borde" onClick={() => updateItem(sel.id, { color: c })} />
+          ))}
+          <div className="sep" />
+          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => addStage(sel)}>＋ Etapa</button>
+        </div>
+      )}
+
       {/* ajustes del post-it seleccionado */}
       {!activeEditor && sel?.type === "postit" && (
         <div className="formatbar pill">
@@ -466,6 +527,17 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
                 ) : it.type === "text" ? (
                   <RichText content={it.content ?? ""} editing={editing === it.id} placeholder="Escribe… (# título, - lista, [ ] tarea)"
                     onChange={(md) => updateItem(it.id, { content: md })} onFocusEditor={setActiveEditor} />
+                ) : it.type === "timeline" ? (
+                  <div className="tl-bar" style={{ "--tc": it.color } as React.CSSProperties}>
+                    {(it.segments ?? []).map((sg, i) => {
+                      const edges = [0, ...(it.dividers ?? []), 1];
+                      return (
+                        <div key={i} className="tl-seg" style={{ width: `${(edges[i + 1] - edges[i]) * 100}%`, background: sg.color, color: sg.textColor ?? "#1d1d1f" }}
+                          data-seg={i}
+                          onPointerDown={(e) => { downAt.current = { x: e.clientX, y: e.clientY, sel: selected === it.id } as typeof downAt.current; }}>{sg.label}</div>
+                      );
+                    })}
+                  </div>
                 ) : it.type === "shape" ? (<>
                   <div dangerouslySetInnerHTML={{ __html: shapeSvg(it) }} />
                   {it.name && <div className="shape-name">{it.name}</div>}
@@ -475,6 +547,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
                 </>) : (
                   <BoardImage dir={dir} file={it.file!} />
                 )}
+                {it.type === "timeline" && (it.titlePos ?? "top") !== "none" && it.name && <div className={`tl-title ${it.titlePos ?? "top"}`}>{it.name}</div>}
+                {it.type === "timeline" && selected === it.id && it.dividers?.map((f, i) => (
+                  <div key={i} className="tl-div" style={{ left: f * it.w }} onPointerDown={(e) => onDividerDown(e, it, i)} />
+                ))}
                 {selected === it.id && it.type !== "postit" && !isLineKind(it.shape) && <div className="resize" onPointerDown={(e) => onResizeDown(e, it)} />}
               </div>
             ))}
@@ -490,6 +566,16 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         <div className="sep" />
         <button className="btn small ghost" onClick={fit} title="Ajustar a la hoja (Ctrl 0)">Ajustar</button>
       </div>
+      {segPop && (() => {
+        const it = state?.items.find((i) => i.id === segPop.id);
+        const sg = it?.segments?.[segPop.idx];
+        if (!it || !sg) return null;
+        const setSeg = (patch: Partial<typeof sg>) => updateItem(it.id, { segments: it.segments!.map((x, i) => (i === segPop.idx ? { ...x, ...patch } : x)) });
+        return (
+          <SegmentPopover key={segPop.id + segPop.idx} anchor={segPop} seg={sg} index={segPop.idx} canDelete={(it.segments?.length ?? 0) > 1}
+            onChange={setSeg} onDelete={() => { removeStage(it, segPop.idx); setSegPop(null); }} onClose={() => setSegPop(null)} />
+        );
+      })()}
       {newShape && (
         <NewShapeDialog anchor={newShape.screen} onClose={() => setNewShape(null)}
           onCreate={(sh) => { const at = newShape.world; setNewShape(null); createShape(sh, at); }} />
@@ -500,6 +586,43 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           onCreate={(p) => { const at = newPostit.world; setNewPostit(null); createPostit(p, at); }} />
       )}
       <div className="hint muted">Ctrl+P: post-it · Ctrl+F: forma · T: texto · Rueda: zoom · Arrastra el fondo o Espacio: mover · Doble clic: editar</div>
+    </div>
+  );
+}
+
+const SEG_COLORS = ["#ffffff", "#f2f2f7", "#ffe066", "#ffadad", "#a0e7a0", "#9bd0ff", "#d7b8ff", "#ffc78f", "#1d1d1f", "#0071e3"];
+
+function SegmentPopover({ anchor, seg, index, canDelete, onChange, onDelete, onClose }: {
+  anchor: { x: number; y: number }; seg: { color: string; label?: string; textColor?: string }; index: number; canDelete: boolean;
+  onChange: (p: { color?: string; label?: string; textColor?: string }) => void; onDelete: () => void; onClose: () => void;
+}) {
+  const W = 320;
+  const left = Math.min(Math.max(16, anchor.x + 12), window.innerWidth - W - 16);
+  const top = Math.min(Math.max(70, anchor.y + 12), window.innerHeight - 300);
+  return (
+    <div className="np-bg" onPointerDown={onClose}>
+      <div className="np seg-pop" style={{ left, top, width: W }} onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape" || e.key === "Enter") onClose(); }}>
+        <button className="np-close" title="Cerrar (Esc)" onClick={onClose} aria-label="Cerrar">
+          <svg viewBox="0 0 10 10" width="8" height="8"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" /></svg>
+        </button>
+        <div className="np-seg-title">Etapa {index + 1}</div>
+        <input autoFocus className="np-name" defaultValue={seg.label ?? ""} placeholder="Texto de la etapa (opcional)" onChange={(e) => onChange({ label: e.target.value })} />
+        <div className="np-label">Relleno</div>
+        <div className="np-colors">
+          {SEG_COLORS.map((c) => <button key={c} className={`np-color ${c === seg.color ? "on" : ""}`} style={{ background: c }} onClick={() => onChange({ color: c })} aria-label={c} />)}
+        </div>
+        <div className="np-label">Color del texto</div>
+        <div className="np-colors">
+          {["#1d1d1f", "#ffffff", "#0071e3", "#ff3b30", "#34c759"].map((c) => (
+            <button key={c} className={`np-color ${c === (seg.textColor ?? "#1d1d1f") ? "on" : ""}`} style={{ background: c }} onClick={() => onChange({ textColor: c })} aria-label={c} />
+          ))}
+        </div>
+        <div className="np-actions split">
+          {canDelete ? <button className="np-danger" onClick={onDelete}>Eliminar etapa</button> : <span />}
+          <button className="np-create" onClick={onClose}>Listo</button>
+        </div>
+      </div>
     </div>
   );
 }

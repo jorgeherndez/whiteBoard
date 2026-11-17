@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { SHAPES, SHAPE_COLORS, ShapeKind, shapeDefaults, shapeSvg } from "./shapes";
 
-export interface NewShape { name: string; kind: ShapeKind | "text"; color: string }
+export interface NewShape { name: string; kind: ShapeKind | "text" | "timeline"; color: string }
 
 interface Props { anchor: { x: number; y: number }; onCreate: (s: NewShape) => void; onClose: () => void }
 
 const W = 360, H = 330;
 
-function Icon({ kind, color }: { kind: ShapeKind | "text"; color: string }) {
-  if (kind === "text") return <span className="ns-text-ico" style={{ color }}>Aa</span>;
+function Icon({ kind, color }: { kind: ShapeKind | "text" | "timeline"; color: string }) {
+  if (kind === "text" || kind === "timeline") return <span className="ns-text-ico" style={{ color }}>Aa</span>;
   const d = shapeDefaults(kind);
   const scale = isFinite(d.w) ? 30 / Math.max(d.w, d.h || 1) : 1;
   const pts = d.points?.map((p) => ({ x: p.x * scale, y: p.y * scale }));
@@ -18,7 +18,7 @@ function Icon({ kind, color }: { kind: ShapeKind | "text"; color: string }) {
 
 export default function NewShapeDialog({ anchor, onCreate, onClose }: Props) {
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<ShapeKind | "text">("arrow");
+  const [kind, setKind] = useState<ShapeKind | "text" | "timeline">("arrow");
   const [color, setColor] = useState(SHAPE_COLORS[0]);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { input.current?.focus(); }, []);
@@ -26,7 +26,7 @@ export default function NewShapeDialog({ anchor, onCreate, onClose }: Props) {
   const create = () => onCreate({ name: name.trim(), kind, color });
   const left = Math.min(Math.max(16, anchor.x + 16), window.innerWidth - W - 16);
   const top = Math.min(Math.max(70, anchor.y - 40), window.innerHeight - H - 16);
-  const options: { kind: ShapeKind | "text"; label: string }[] = [...SHAPES, { kind: "text", label: "Campo de texto" }];
+  const options: { kind: ShapeKind | "text" | "timeline"; label: string }[] = [...SHAPES, { kind: "text", label: "Campo de texto" }, { kind: "timeline", label: "Timeline" }];
 
   return (
     <div className="np-bg" onPointerDown={onClose}>

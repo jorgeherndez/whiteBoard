@@ -3,7 +3,7 @@ import { fsx } from "./storage";
 import { shapeSvg } from "./shapes";
 import type { ShapeKind, Pt } from "./shapes";
 
-export type ItemType = "text" | "postit" | "image" | "shape";
+export type ItemType = "text" | "postit" | "image" | "shape" | "timeline";
 
 export interface Item {
   id: string;
@@ -16,9 +16,15 @@ export interface Item {
   name?: string; // nombre interno (post-its y figuras)
   shape?: ShapeKind; // figuras
   points?: Pt[]; // líneas y flechas: nodos en coordenadas locales
+  // timeline
+  titlePos?: "top" | "bottom" | "none";
+  dividers?: number[]; // posiciones de las líneas verticales (0..1)
+  segments?: Segment[]; // una más que dividers
   file?: string; // imágenes: nombre dentro de imagenes/
   content?: string; // textos y post-its: markdown (se guarda en .md aparte)
 }
+
+export interface Segment { color: string; label?: string; textColor?: string }
 
 export interface Sheet { w: number; h: number }
 export interface Camera { x: number; y: number; z: number }
@@ -115,7 +121,7 @@ export async function loadBoard(dir: string): Promise<{ file: BoardFile; state: 
 export async function saveBoard(dir: string, meta: BoardMeta, state: BoardState, camera: Camera, saved: Map<string, string>) {
   const current = new Map<string, string>();
   for (const it of state.items) {
-    if (it.type === "image") continue;
+    if (it.type === "image" || it.type === "timeline") continue;
     const p = it.type === "shape" ? `${dir}/formas/${it.id}.svg` : contentPath(dir, it);
     const c = it.type === "shape" ? shapeSvg(it, true) : it.content ?? "";
     current.set(p, c);
