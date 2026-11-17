@@ -139,3 +139,4 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .rt pre { background: rgba(0,0,0,.06); padding: .6em .8em; border-radius: 6px; }
 .rt pre code { background: none; padding: 0; }
 .rt p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: rgba(0,0,0,.3); float: left; height: 0; pointer-events: none; }
+.bar-label { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 8px 0 6px; }

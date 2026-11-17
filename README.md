@@ -11,6 +11,22 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 - **Imágenes**: botón Imagen, arrastrar archivos o pegar (Ctrl+V).
 - **Deshacer / rehacer** (botones y Ctrl+Z / Ctrl+Y) y **guardado automático** (punto verde = guardado; Ctrl+S fuerza el guardado).
 
+## Atajos
+
+| Tecla | Acción |
+|---|---|
+| P / Mayús+P | Post-it pequeño / grande donde está el ratón |
+| T | Texto donde está el ratón |
+| Ctrl+Z, Ctrl+Y | Deshacer, rehacer |
+| Ctrl+S | Guardar ya |
+| Supr | Eliminar seleccionado |
+| Intro / Esc | Editar / terminar de editar |
+| Ctrl + / − / 0 | Acercar / alejar / ajustar a la hoja |
+| Espacio + arrastrar | Mover el lienzo |
+| Ctrl+V | Pegar imagen |
+
+Al seleccionar un post-it aparece una barra para cambiar su color y tamaño, levantarlo o editarlo.
+
 ## Dónde se guarda
 
 `Documentos\MisPizarras\<nombre-pizarra>\`

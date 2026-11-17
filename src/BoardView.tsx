@@ -35,6 +35,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const camRef = useRef(cam);
   camRef.current = cam;
   const drag = useRef<Drag | null>(null);
+  const mouse = useRef<{ x: number; y: number } | null>(null); // posición del ratón en el mundo
   const viewport = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const savedMap = useRef(new Map<string, string>());
@@ -128,8 +129,9 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     if (item.type !== "image") setEditing(item.id);
   };
 
-  const addText = () => addItem({ type: "text", w: 360, h: 120, content: "" });
-  const addPostit = (size: "s" | "l") => addItem({ type: "postit", w: POSTIT_SIZES[size], h: POSTIT_SIZES[size], color, content: "" });
+  const addPostit = (size: "s" | "l", at?: { x: number; y: number }) =>
+    addItem({ type: "postit", w: POSTIT_SIZES[size], h: POSTIT_SIZES[size], color, content: "" }, at);
+  const addText = (at?: { x: number; y: number }) => addItem({ type: "text", w: 360, h: 120, content: "" }, at);
 
   const addImages = async (files: FileList | File[], at?: { x: number; y: number }) => {
     for (const f of Array.from(files)) {
@@ -191,6 +193,9 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
 
   // ---------- punteros ----------
   const onPointerMove = (e: React.PointerEvent) => {
+    const r = viewport.current!.getBoundingClientRect();
+    const c = camRef.current;
+    mouse.current = { x: (e.clientX - r.left - c.x) / c.z, y: (e.clientY - r.top - c.y) / c.z };
     const d = drag.current;
     if (!d) return;
     const z = camRef.current.z;
@@ -269,6 +274,8 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (inField) return;
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
+      else if (!mod && !e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); addPostit(e.shiftKey ? "l" : "s", mouse.current ?? undefined); }
+      else if (!mod && !e.altKey && e.key.toLowerCase() === "t") { e.preventDefault(); addText(mouse.current ?? undefined); }
       else if (e.key === "Delete" || e.key === "Backspace") removeSelected();
       else if (e.key === "Enter" && selected) { const it = stateRef.current?.items.find((i) => i.id === selected); if (it && it.type !== "image") { e.preventDefault(); setEditing(selected); } }
       else if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); zoomCenter(1.2); }
@@ -314,7 +321,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         </div>
 
         <div className="pill tools">
-          <button className="tool" title="Texto" onClick={addText}><span className="t-ico">Aa</span>Texto</button>
+          <button className="tool" title="Texto" onClick={() => addText()}><span className="t-ico">Aa</span>Texto</button>
           <div className="sep" />
           <button className="tool" title="Post-it pequeño" onClick={() => addPostit("s")}><span className="pi-ico s" style={{ background: color }} />Pequeño</button>
           <button className="tool" title="Post-it grande" onClick={() => addPostit("l")}><span className="pi-ico l" style={{ background: color }} />Grande</button>
@@ -340,6 +347,25 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
 
       {/* barra de formato */}
       {activeEditor && <FormatBar editor={activeEditor} />}
+
+      {/* ajustes del post-it seleccionado */}
+      {!activeEditor && sel?.type === "postit" && (
+        <div className="formatbar pill">
+          <span className="bar-label">Post-it</span>
+          {POSTIT_COLORS.map((c) => (
+            <button key={c} className={`swatch ${c === sel.color ? "on" : ""}`} style={{ background: c, margin: "0 2px" }}
+              title="Color" onClick={() => { setColor(c); updateItem(sel.id, { color: c }); }} />
+          ))}
+          <div className="sep" />
+          {(["s", "l"] as const).map((k) => (
+            <button key={k} className={`fmt ${sel.w === POSTIT_SIZES[k] ? "on" : ""}`} style={{ padding: "0 10px" }}
+              onClick={() => updateItem(sel.id, { w: POSTIT_SIZES[k], h: POSTIT_SIZES[k] })}>{k === "s" ? "Pequeño" : "Grande"}</button>
+          ))}
+          <div className="sep" />
+          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => toggleLift(sel.id)}>{lifted.has(sel.id) ? "Bajar" : "Levantar"}</button>
+          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => setEditing(sel.id)}>Editar</button>
+        </div>
+      )}
 
       {/* lienzo */}
       <div
@@ -401,7 +427,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         <div className="sep" />
         <button className="btn small ghost" onClick={fit} title="Ajustar a la hoja (Ctrl 0)">Ajustar</button>
       </div>
-      <div className="hint muted">Rueda: zoom · Arrastra el fondo o Espacio: mover · Doble clic: editar</div>
+      <div className="hint muted">P: post-it en el ratón (Mayús+P grande) · T: texto · Rueda: zoom · Arrastra el fondo o Espacio: mover · Doble clic: editar</div>
     </div>
   );
 }
