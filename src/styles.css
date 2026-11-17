@@ -207,3 +207,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .np-seg-title { font-weight: 600; font-size: 15px; margin-bottom: 8px; padding-right: 26px; }
 .np-danger { border: none; background: transparent; color: var(--danger); font-size: 13px; font-weight: 500; padding: 8px 4px; }
 .np-actions.split { justify-content: space-between; align-items: center; }
+.tl-edge { position: absolute; left: 6px; right: 6px; height: 12px; cursor: crosshair; z-index: 2; }
+.tl-edge.top { top: -6px; }
+.tl-edge.bottom { bottom: -6px; }
+.tl-div.on::before { content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 2px; background: var(--accent); }
+.tl-div.on::after { background: var(--accent); }
+.tl-draw { position: absolute; width: 0; border-left: 2px dashed var(--muted); margin-left: -1px; pointer-events: none; z-index: 3; }
+.tl-draw.ok { border-left-color: var(--accent); border-left-style: solid; }
+.ctx { position: fixed; background: #fff; border-radius: 10px; padding: 4px; min-width: 150px; box-shadow: 6px 8px 24px rgba(0,0,0,.14), 0 1px 3px rgba(0,0,0,.08); animation: pop .12s; }
+.ctx button { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 7px 10px; border-radius: 7px; font-size: 13px; color: var(--danger); }
+.ctx button:hover { background: rgba(255,59,48,.08); }

@@ -17,6 +17,7 @@ type Drag =
   | { kind: "move"; id: string; sx: number; sy: number; ox: number; oy: number; base: BoardState }
   | { kind: "node"; id: string; idx: number; sx: number; sy: number; ox: number; oy: number; base: BoardState }
   | { kind: "divider"; id: string; idx: number; sx: number; sy: number; ox: number; base: BoardState }
+  | { kind: "draw"; id: string; sx: number; sy: number; f: number; fromTop: boolean; base: BoardState }
   | { kind: "resize"; id: string; sx: number; sy: number; ow: number; oh: number; ratio?: number; base: BoardState }
   | { kind: "sheet"; edge: "r" | "b" | "rb"; sx: number; sy: number; ow: number; oh: number; base: BoardState };
 
@@ -30,6 +31,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const [newPostit, setNewPostit] = useState<{ screen: { x: number; y: number }; world?: { x: number; y: number } } | null>(null);
   const [newShape, setNewShape] = useState<{ screen: { x: number; y: number }; world?: { x: number; y: number } } | null>(null);
   const [segPop, setSegPop] = useState<{ id: string; idx: number; x: number; y: number } | null>(null);
+  const [selDiv, setSelDiv] = useState<{ id: string; idx: number } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ id: string; idx: number; x: number; y: number } | null>(null);
+  const [warnDiv, setWarnDiv] = useState<{ id: string; idx: number; label: string } | null>(null);
+  const [drawPrev, setDrawPrev] = useState<{ id: string; f: number; fromTop: boolean; len: number } | null>(null);
   const downAt = useRef({ x: 0, y: 0, sel: false });
   const mouseScreen = useRef<{ x: number; y: number } | null>(null);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
@@ -237,7 +242,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     const dx = (e.clientX - d.sx) / z, dy = (e.clientY - d.sy) / z;
     if (d.kind === "pan") setCam({ ...d.cam, x: d.cam.x + (e.clientX - d.sx), y: d.cam.y + (e.clientY - d.sy) });
     else if (d.kind === "move") updateItem(d.id, { x: Math.round(d.ox + dx), y: Math.round(d.oy + dy) }, false);
-    else if (d.kind === "divider") {
+    else if (d.kind === "draw") {
+      const it = stateRef.current!.items.find((i) => i.id === d.id);
+      if (it) setDrawPrev({ id: d.id, f: d.f, fromTop: d.fromTop, len: Math.max(0, Math.min(1, (d.fromTop ? dy : -dy) / it.h)) });
+    } else if (d.kind === "divider") {
       const it = stateRef.current!.items.find((i) => i.id === d.id);
       if (it?.dividers) {
         const lo = (it.dividers[d.idx - 1] ?? 0) + 0.02, hi = (it.dividers[d.idx + 1] ?? 1) - 0.02;
@@ -268,6 +276,13 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (el) setSegPop({ id: d.id, idx: Number(el.dataset.seg), x: e.clientX, y: e.clientY });
     }
     downAt.current.sel = false;
+    if (d?.kind === "draw") {
+      const prev = drawPrev;
+      setDrawPrev(null);
+      if (prev && prev.len >= 0.6) insertDivider(d.id, d.f);
+      return;
+    }
+    if (d?.kind === "divider" && stateRef.current === d.base) { setSelDiv({ id: d.id, idx: d.idx }); return; }
     if (!d || d.kind === "pan") return;
     if (stateRef.current !== d.base) {
       past.current.push(d.base);
@@ -285,6 +300,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     if (e.button !== 0 && e.button !== 1) return;
     setSelected(null);
     setEditing(null);
+    setSelDiv(null);
     startPan(e);
   };
 
@@ -318,15 +334,37 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     viewport.current!.setPointerCapture(e.pointerId);
     drag.current = { kind: "divider", id: it.id, idx, sx: e.clientX, sy: e.clientY, ox: it.dividers![idx], base: stateRef.current! };
   };
-  const addStage = (it: Item) => {
+  const insertDivider = (id: string, f: number) => {
+    const it = stateRef.current!.items.find((i) => i.id === id);
+    if (!it) return;
     const d = it.dividers ?? [], segs = it.segments ?? [{ color: "#ffffff" }];
-    const edges = [0, ...d, 1];
-    let best = 0;
-    for (let i = 0; i < edges.length - 1; i++) if (edges[i + 1] - edges[i] > edges[best + 1] - edges[best]) best = i;
-    const mid = (edges[best] + edges[best + 1]) / 2;
-    const nd = [...d]; nd.splice(best, 0, mid);
-    const ns = [...segs]; ns.splice(best + 1, 0, { color: "#ffffff" });
-    updateItem(it.id, { dividers: nd, segments: ns });
+    if (f < 0.02 || f > 0.98 || d.some((v) => Math.abs(v - f) < 0.02)) return;
+    const k = d.filter((v) => v < f).length; // franja que se parte
+    const nd = [...d]; nd.splice(k, 0, f);
+    const ns = [...segs]; ns.splice(k + 1, 0, { color: "#ffffff" });
+    updateItem(id, { dividers: nd, segments: ns });
+  };
+  const hasContent = (sg?: { color: string; label?: string }) => !!sg && (!!sg.label?.trim() || (sg.color ?? "#ffffff").toLowerCase() !== "#ffffff");
+  /** Borra la línea idx: se fusionan sus dos franjas. Avisa si las dos tienen contenido. */
+  const requestDeleteDivider = (id: string, idx: number, force = false) => {
+    const it = stateRef.current!.items.find((i) => i.id === id);
+    if (!it?.dividers || !it.segments) return;
+    const left = it.segments[idx], right = it.segments[idx + 1];
+    if (!force && hasContent(left) && hasContent(right)) {
+      setWarnDiv({ id, idx, label: right.label?.trim() || `Etapa ${idx + 2}` });
+      return;
+    }
+    const keep = hasContent(left) || !hasContent(right) ? left : right;
+    const segs = [...it.segments]; segs.splice(idx, 2, keep);
+    updateItem(id, { dividers: it.dividers.filter((_, i) => i !== idx), segments: segs });
+    setSelDiv(null);
+  };
+  const onEdgeDown = (e: React.PointerEvent, it: Item, fromTop: boolean) => {
+    e.stopPropagation();
+    const r = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+    viewport.current!.setPointerCapture(e.pointerId);
+    drag.current = { kind: "draw", id: it.id, sx: e.clientX, sy: e.clientY, f: (e.clientX - r.left) / r.width, fromTop, base: stateRef.current! };
+    setSelDiv(null);
   };
   const removeStage = (it: Item, idx: number) => {
     const d = [...(it.dividers ?? [])], segs = [...(it.segments ?? [])];
@@ -358,6 +396,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
       else if (!mod && !e.altKey && e.key.toLowerCase() === "t") { e.preventDefault(); addText(mouse.current ?? undefined); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && selDiv) requestDeleteDivider(selDiv.id, selDiv.idx);
       else if (e.key === "Delete" || e.key === "Backspace") removeSelected();
       else if (e.key === "Enter" && selected) { const it = stateRef.current?.items.find((i) => i.id === selected); if (it && (it.type === "text" || it.type === "postit")) { e.preventDefault(); setEditing(selected); } }
       else if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); zoomCenter(1.2); }
@@ -458,8 +497,6 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           {SHAPE_COLORS.slice(0, 6).map((c) => (
             <button key={c} className={`swatch ${c === sel.color ? "on" : ""}`} style={{ background: c, margin: "0 2px" }} title="Color del borde" onClick={() => updateItem(sel.id, { color: c })} />
           ))}
-          <div className="sep" />
-          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => addStage(sel)}>＋ Etapa</button>
         </div>
       )}
 
@@ -549,8 +586,18 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
                 )}
                 {it.type === "timeline" && (it.titlePos ?? "top") !== "none" && it.name && <div className={`tl-title ${it.titlePos ?? "top"}`}>{it.name}</div>}
                 {it.type === "timeline" && selected === it.id && it.dividers?.map((f, i) => (
-                  <div key={i} className="tl-div" style={{ left: f * it.w }} onPointerDown={(e) => onDividerDown(e, it, i)} />
+                  <div key={i} className={`tl-div ${selDiv?.id === it.id && selDiv.idx === i ? "on" : ""}`} style={{ left: f * it.w }}
+                    title="Arrastra para mover · clic y Supr para borrar · clic derecho"
+                    onPointerDown={(e) => { if (e.button === 0) onDividerDown(e, it, i); else e.stopPropagation(); }}
+                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setSelDiv({ id: it.id, idx: i }); setCtxMenu({ id: it.id, idx: i, x: e.clientX, y: e.clientY }); }} />
                 ))}
+                {it.type === "timeline" && selected === it.id && (<>
+                  <div className="tl-edge top" title="Arrastra hacia abajo para crear una división" onPointerDown={(e) => onEdgeDown(e, it, true)} />
+                  <div className="tl-edge bottom" title="Arrastra hacia arriba para crear una división" onPointerDown={(e) => onEdgeDown(e, it, false)} />
+                </>)}
+                {drawPrev?.id === it.id && (
+                  <div className={`tl-draw ${drawPrev.len >= 0.6 ? "ok" : ""}`} style={{ left: drawPrev.f * it.w, height: drawPrev.len * it.h, top: drawPrev.fromTop ? 0 : undefined, bottom: drawPrev.fromTop ? undefined : 0 }} />
+                )}
                 {selected === it.id && it.type !== "postit" && !isLineKind(it.shape) && <div className="resize" onPointerDown={(e) => onResizeDown(e, it)} />}
               </div>
             ))}
@@ -566,14 +613,32 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         <div className="sep" />
         <button className="btn small ghost" onClick={fit} title="Ajustar a la hoja (Ctrl 0)">Ajustar</button>
       </div>
+      {ctxMenu && (
+        <div className="np-bg" onPointerDown={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}>
+          <div className="ctx" style={{ left: ctxMenu.x, top: ctxMenu.y }} onPointerDown={(e) => e.stopPropagation()}>
+            <button onClick={() => { const c = ctxMenu; setCtxMenu(null); requestDeleteDivider(c.id, c.idx); }}>Borrar línea</button>
+          </div>
+        </div>
+      )}
+      {warnDiv && (
+        <div className="modal-bg" onMouseDown={() => setWarnDiv(null)}>
+          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>¿Borrar esta división?</h2>
+            <p className="muted">«{warnDiv.label}» tiene nombre o color y se perderá. La etapa de la izquierda ocupará su espacio.</p>
+            <div className="modal-actions">
+              <button className="btn ghost" onClick={() => setWarnDiv(null)}>Cancelar</button>
+              <button className="btn danger-fill" autoFocus onClick={() => { const w = warnDiv; setWarnDiv(null); requestDeleteDivider(w.id, w.idx, true); }}>Borrar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {segPop && (() => {
         const it = state?.items.find((i) => i.id === segPop.id);
         const sg = it?.segments?.[segPop.idx];
         if (!it || !sg) return null;
         const setSeg = (patch: Partial<typeof sg>) => updateItem(it.id, { segments: it.segments!.map((x, i) => (i === segPop.idx ? { ...x, ...patch } : x)) });
         return (
-          <SegmentPopover key={segPop.id + segPop.idx} anchor={segPop} seg={sg} index={segPop.idx} canDelete={(it.segments?.length ?? 0) > 1}
-            onChange={setSeg} onDelete={() => { removeStage(it, segPop.idx); setSegPop(null); }} onClose={() => setSegPop(null)} />
+          <SegmentPopover key={segPop.id + segPop.idx} anchor={segPop} seg={sg} index={segPop.idx} onChange={setSeg} onClose={() => setSegPop(null)} />
         );
       })()}
       {newShape && (
@@ -592,9 +657,9 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
 
 const SEG_COLORS = ["#ffffff", "#f2f2f7", "#ffe066", "#ffadad", "#a0e7a0", "#9bd0ff", "#d7b8ff", "#ffc78f", "#1d1d1f", "#0071e3"];
 
-function SegmentPopover({ anchor, seg, index, canDelete, onChange, onDelete, onClose }: {
-  anchor: { x: number; y: number }; seg: { color: string; label?: string; textColor?: string }; index: number; canDelete: boolean;
-  onChange: (p: { color?: string; label?: string; textColor?: string }) => void; onDelete: () => void; onClose: () => void;
+function SegmentPopover({ anchor, seg, index, onChange, onClose }: {
+  anchor: { x: number; y: number }; seg: { color: string; label?: string; textColor?: string }; index: number;
+  onChange: (p: { color?: string; label?: string; textColor?: string }) => void; onClose: () => void;
 }) {
   const W = 320;
   const left = Math.min(Math.max(16, anchor.x + 12), window.innerWidth - W - 16);
@@ -618,8 +683,7 @@ function SegmentPopover({ anchor, seg, index, canDelete, onChange, onDelete, onC
             <button key={c} className={`np-color ${c === (seg.textColor ?? "#1d1d1f") ? "on" : ""}`} style={{ background: c }} onClick={() => onChange({ textColor: c })} aria-label={c} />
           ))}
         </div>
-        <div className="np-actions split">
-          {canDelete ? <button className="np-danger" onClick={onDelete}>Eliminar etapa</button> : <span />}
+        <div className="np-actions">
           <button className="np-create" onClick={onClose}>Listo</button>
         </div>
       </div>
