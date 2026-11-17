@@ -40,8 +40,10 @@ jobs:
         with:
           # Sin la clave (p. ej. antes de configurarla) se compila igual, pero sin archivos de actualización
           args: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY == '' && '--config {"bundle":{"createUpdaterArtifacts":false}}' || '' }}
-          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-          releaseName: WhiteBoard ${{ github.ref_name }}
+          # Cada push a main publica (o actualiza) la Release vX.Y.Z según la versión de tauri.conf.json.
+          # Para sacar una versión nueva basta con subir el número de versión.
+          tagName: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && 'v__VERSION__' || '' }}
+          releaseName: WhiteBoard v__VERSION__
           releaseDraft: false
 
       - uses: actions/upload-artifact@v4

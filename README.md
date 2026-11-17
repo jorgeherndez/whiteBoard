@@ -64,7 +64,7 @@ Desde la 0.2.0, al abrir la app se comprueba si hay una Release más nueva en Gi
 
 - El repositorio debe ser **público** (la app descarga `latest.json` de las Releases).
 - El secreto `TAURI_SIGNING_PRIVATE_KEY` debe estar en *Settings → Secrets and variables → Actions*. Sin él, el workflow compila pero no genera los archivos firmados.
-- Cada versión nueva: subir `version` en `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` y `package.json`, y crear la etiqueta `vX.Y.Z`.
+- Cada versión nueva: subir `version` en `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` y `package.json`. Al fusionar en `main`, el workflow crea la Release `vX.Y.Z` automáticamente.
 
 ## Desarrollo
 
