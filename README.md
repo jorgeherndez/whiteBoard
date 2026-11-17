@@ -5,7 +5,7 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 ## Qué hace (v0.1)
 
 - **Menú de pizarras**: crear (nombre y descripción), abrir, editar, duplicar y eliminar.
-- **Lienzo infinito**: fondo gris con una hoja blanca inicial de 1920×1080 que puedes agrandar arrastrando su borde derecho, inferior o la esquina. Rueda del ratón = zoom; arrastrar el fondo, botón central o Espacio = mover.
+- **Lienzo infinito**: fondo gris con una hoja blanca inicial de 1920×1080 que puedes agrandar arrastrando su borde derecho, inferior o la esquina. Rueda del ratón = zoom. Por defecto el ratón es la **mano**: arrastrar el fondo mueve el lienzo y arrastrar un elemento lo mueve. Tras crear cualquier cosa se vuelve a la mano.
 - **Texto** con formato estilo Obsidian: `# ` títulos, `**negrita**`, `*cursiva*`, `- ` listas, `1. `, `[ ] ` tareas, `> ` citas. Barra de formato al editar.
 - **Post-its** de 6 colores y 2 tamaños. Se pueden **levantar** con la esquina inferior derecha para ver lo que hay debajo (siguen pegados por arriba).
 - **Imágenes**: botón Imagen, arrastrar archivos o pegar (Ctrl+V).
@@ -27,9 +27,11 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 | Ctrl+Z, Ctrl+Y | Deshacer, rehacer |
 | Ctrl+S | Guardar ya |
 | Supr | Eliminar selección |
-| Intro / Esc | Editar / terminar (Esc también sale del rotulador) |
+| Intro / Esc | Editar / terminar (Esc también vuelve a la mano) |
 | Ctrl + / − / 0 | Acercar / alejar / ajustar a la hoja |
-| Espacio, botón central o derecho + arrastrar | Mover el lienzo |
+| Espacio, botón central o derecho + arrastrar | Mover el lienzo (con cualquier herramienta) |
+| H / V / B | Mano / Selección (recuadro) / Rotulador |
+| Mayús + arrastrar el fondo | Recuadro de selección estando con la mano |
 | Alt al mover | Desactiva las guías magnéticas |
 
 - **Flechas conectadas**: al seleccionar cualquier elemento salen 4 puntos (centro de cada lado); arrastra desde uno para crear una flecha unida. Los extremos de cualquier flecha o línea se enganchan al soltarlos cerca de un punto, y siguen al elemento al moverlo.
