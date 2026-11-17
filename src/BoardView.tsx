@@ -718,7 +718,12 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
 
   const sel = state?.items.find((i) => i.id === selected);
   const view = state ? resolveLines(state.items) : [];
-  const ordered = [...view.filter((i) => !i.pinned), ...view.filter((i) => i.pinned)];
+  // capas: lo que está «pintado» en la pizarra, encima los post-its (como en la vida real) y arriba del todo lo fijado
+  const ordered = [
+    ...view.filter((i) => !i.pinned && i.type !== "postit"),
+    ...view.filter((i) => !i.pinned && i.type === "postit"),
+    ...view.filter((i) => i.pinned),
+  ];
   const matches = search?.q.trim() ? view.filter((i) => norm(itemText(i)).includes(norm(search.q.trim()))).map((i) => i.id) : [];
   const current = matches.length ? matches[((search!.idx % matches.length) + matches.length) % matches.length] : null;
   const connecting = connDrag;
