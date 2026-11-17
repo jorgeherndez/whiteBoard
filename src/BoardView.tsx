@@ -37,6 +37,7 @@ type Drag =
   | { kind: "erase"; sx: number; sy: number };
 
 type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+type Tool = "hand" | "select" | "pen" | "eraser";
 const EDGES: Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 const sheetRect = (sh: Sheet) => ({ x: sh.x ?? 0, y: sh.y ?? 0, w: sh.w, h: sh.h });
 const sheetClip = (sh: Sheet, ox = 0, oy = 0) => {
@@ -60,7 +61,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [snapTarget, setSnapTarget] = useState<{ x: number; y: number } | null>(null);
-  const [pen, setPen] = useState<{ on: boolean; mode: "pen" | "eraser"; color: string; size: number }>({ on: false, mode: "pen", color: PEN_COLORS[1], size: PEN_SIZES[1] });
+  const [pen, setPen] = useState<{ color: string; size: number }>({ color: PEN_COLORS[1], size: PEN_SIZES[1] });
+  /** Herramienta del ratón: mano (por defecto), selección, rotulador o goma */
+  const [tool, setTool] = useState<Tool>("hand");
+  const penOn = tool === "pen" || tool === "eraser";
   const [erasing, setErasing] = useState<Set<string>>(new Set());
   const [panning, setPanning] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
@@ -185,6 +189,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     const c = at ?? viewCenter();
     const item: Item = { ...it, id: uid(), x: c.x - it.w / 2, y: c.y - it.h / 2 };
     commit({ ...stateRef.current!, items: [...stateRef.current!.items, item] });
+    setTool("hand"); // tras crear algo, se vuelve a la mano para moverlo o ajustarlo
     setSelected(item.id);
     if (item.type === "text" || item.type === "postit") setEditing(item.id);
   };
@@ -293,6 +298,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     }
     commit({ ...stateRef.current!, items: [...stateRef.current!.items, ...out] });
     setSelIds(out.map((i) => i.id));
+    setTool("hand");
     clip = { dir, items: out.map((i) => structuredClone(i)) }; // pegados sucesivos se van desplazando
   };
   const duplicateSel = () => { if (copySel()) pasteClip(); };
@@ -503,7 +509,9 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     setSelDiv(null);
     if (e.button === 1 || e.button === 2 || spaceDown) return startPan(e);
     if (e.button !== 0) return;
-    // arrastrar el fondo = recuadro de selección (Mayús añade)
+    // mano: arrastrar el fondo mueve el lienzo (Mayús+arrastrar = recuadro de selección)
+    if (tool === "hand" && !e.shiftKey) { setSelIds([]); return startPan(e); }
+    // selección: arrastrar el fondo = recuadro de selección (Mayús añade)
     if (!e.shiftKey) setSelIds([]);
     viewport.current!.setPointerCapture(e.pointerId);
     const m = mouse.current ?? { x: 0, y: 0 };
@@ -519,8 +527,8 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   };
 
   const onPenDown = (e: React.PointerEvent) => {
-    if (!pen.on || e.button !== 0 || spaceDown) return;
-    if (pen.mode === "eraser") {
+    if (!penOn || e.button !== 0 || spaceDown) return;
+    if (tool === "eraser") {
       e.stopPropagation(); e.preventDefault();
       viewport.current!.setPointerCapture(e.pointerId);
       const r = viewport.current!.getBoundingClientRect(), c = camRef.current;
@@ -659,7 +667,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (mod && e.key.toLowerCase() === "e") { e.preventDefault(); if (!newShape) { setEditing(null); openNewShape(true); } return; }
       if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); setSearch((s) => s ?? { q: "", idx: 0 }); setTimeout(() => (document.querySelector(".search-input") as HTMLInputElement | null)?.select(), 0); return; }
       if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); doSave(); return; }
-      if (e.key === "Escape") { setEditing(null); if (!inField) { setPen((p) => ({ ...p, on: false })); setSelIds([]); setShowKeys(false); } return; }
+      if (e.key === "Escape") { setEditing(null); if (!inField) { setTool("hand"); setSelIds([]); setShowKeys(false); } return; }
       if (inField) return;
       const k = e.key.toLowerCase();
       if (mod && k === "a") { e.preventDefault(); setSelIds(stateRef.current!.items.map((i) => i.id)); return; }
@@ -670,6 +678,9 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (mod && (e.key === "[" || e.code === "BracketLeft")) { e.preventDefault(); reorder(selIds, false); return; }
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
+      else if (!mod && !e.altKey && k === "h") setTool("hand");
+      else if (!mod && !e.altKey && k === "v") setTool("select");
+      else if (!mod && !e.altKey && k === "b") setTool((t) => (t === "pen" ? "hand" : "pen"));
       else if (!mod && !e.altKey && e.key.toLowerCase() === "t") { e.preventDefault(); addText(mouse.current ?? undefined); }
       else if ((e.key === "Delete" || e.key === "Backspace") && selDiv) requestDeleteDivider(selDiv.id, selDiv.idx);
       else if (e.key === "Delete" || e.key === "Backspace") removeSelected();
@@ -749,14 +760,19 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         </div>
 
         <div className="pill tools">
-          <button className="tool" title="Texto" onClick={() => addText()}><span className="t-ico">Aa</span>Texto</button>
+          <button className={`tool icon-only ${tool === "hand" ? "on" : ""}`} title="Mano: arrastra el fondo para moverte y los elementos para moverlos (H)" aria-label="Mano" onClick={() => setTool("hand")}>
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.2 8.6V3.4a1 1 0 012 0v4.2M7.2 7.4V2.4a1 1 0 012 0v5M9.2 7.4V3.2a1 1 0 012 0v4.6M11.2 7.8V5.2a1 1 0 012 0v4.6c0 2.6-1.9 4.7-4.6 4.7-1.6 0-2.8-.7-3.7-2l-2.2-3.3a1 1 0 011.5-1.3l1 1" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+          <button className={`tool icon-only ${tool === "select" ? "on" : ""}`} title="Selección: arrastra el fondo para seleccionar varios (V)" aria-label="Selección" onClick={() => setTool("select")}>
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 2.5l8.5 4.2-3.7 1.1-1.4 3.6z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><path d="M9.5 10.5h4M11.5 13.5h2v-2M2.5 13.5h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeDasharray="1.4 1.6" /></svg></button>
+          <div className="sep" />
+          <button className="tool" title="Texto (T)" onClick={() => addText()}><span className="t-ico">Aa</span>Texto</button>
           <div className="sep" />
           <button className="tool" title="Nuevo post-it (Ctrl+P)" onClick={() => openNewPostit(false)}><span className="pi-ico l" style={{ background: POSTIT_COLORS[0] }} />Post-it</button>
           <div className="sep" />
           <button className="tool" title="Nueva forma (Ctrl+E)" onClick={() => openNewShape(false)}><span className="t-ico">◇</span>Forma</button>
-          <button className={`tool ${pen.on && pen.mode === "pen" ? "on" : ""}`} title="Rotulador (Esc para salir)" onClick={() => setPen((p) => ({ ...p, on: !(p.on && p.mode === "pen"), mode: "pen" }))}>
+          <button className={`tool ${tool === "pen" ? "on" : ""}`} title="Rotulador (B · Esc para salir)" onClick={() => setTool((t) => (t === "pen" ? "hand" : "pen"))}>
             <svg width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3-7.5 7.5H3v-3z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M3 13l-.5 1.5" stroke={pen.color} strokeWidth="2.4" strokeLinecap="round" /></svg>Rotulador</button>
-          <button className={`tool ${pen.on && pen.mode === "eraser" ? "on" : ""}`} title="Goma: borra trazos del rotulador (Esc para salir)" onClick={() => setPen((p) => ({ ...p, on: !(p.on && p.mode === "eraser"), mode: "eraser" }))}>
+          <button className={`tool ${tool === "eraser" ? "on" : ""}`} title="Goma: borra trazos del rotulador (Esc para salir)" onClick={() => setTool((t) => (t === "eraser" ? "hand" : "eraser"))}>
             <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6 13.5h8M2.8 9.6l6.4-6.4a1.4 1.4 0 012 0l2.6 2.6a1.4 1.4 0 010 2L8 13.5H5.6L2.8 10.7a.8.8 0 010-1.1z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><path d="M5.5 6.9l4.6 4.6" stroke="currentColor" strokeWidth="1.3" /></svg>Goma</button>
           <button className="tool" title="Imagen" onClick={() => fileInput.current?.click()}><span className="t-ico">▣</span>Imagen</button>
           <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { e.target.files && addImages(e.target.files); e.target.value = ""; }} />
@@ -775,14 +791,14 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       {activeEditor && <FormatBar editor={activeEditor} />}
 
       {/* rotulador */}
-      {pen.on && pen.mode === "eraser" && (
+      {tool === "eraser" && (
         <div className="formatbar pill pen-bar">
           <span className="bar-label">Goma · arrastra sobre los trazos para borrarlos</span>
           <div className="sep" />
-          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => setPen((p) => ({ ...p, on: false }))}>Listo</button>
+          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => setTool("hand")}>Listo</button>
         </div>
       )}
-      {pen.on && pen.mode === "pen" && (
+      {tool === "pen" && (
         <div className="formatbar pill pen-bar">
           <span className="bar-label">Rotulador</span>
           {PEN_SIZES.map((sz) => (
@@ -795,12 +811,12 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
             <button key={c} className={`swatch ${c === pen.color ? "on" : ""}`} style={{ background: c, margin: "0 3px" }} onClick={() => setPen((p) => ({ ...p, color: c }))} />
           ))}
           <div className="sep" />
-          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => setPen((p) => ({ ...p, on: false }))}>Listo</button>
+          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => setTool("hand")}>Listo</button>
         </div>
       )}
 
       {/* varios elementos seleccionados */}
-      {!pen.on && !activeEditor && selItems.length > 1 && (
+      {!penOn && !activeEditor && selItems.length > 1 && (
         <div className="formatbar pill">
           <span className="bar-label">{selItems.length} elementos</span>
           <div className="sep" />
@@ -837,7 +853,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       )}
 
       {/* ajustes de la figura seleccionada */}
-      {!pen.on && !activeEditor && sel?.type === "shape" && (
+      {!penOn && !activeEditor && sel?.type === "shape" && (
         <div className="formatbar pill">
           <input key={sel.id} className="bar-name" defaultValue={sel.name ?? ""} placeholder="Nombre (opcional)"
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
@@ -856,7 +872,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       )}
 
       {/* ajustes de la timeline seleccionada */}
-      {!pen.on && !activeEditor && sel?.type === "timeline" && (
+      {!penOn && !activeEditor && sel?.type === "timeline" && (
         <div className="formatbar pill">
           <input key={sel.id} className="bar-name" defaultValue={sel.name ?? ""} placeholder="Título"
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
@@ -876,7 +892,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       )}
 
       {/* ajustes del post-it seleccionado */}
-      {!pen.on && !activeEditor && sel?.type === "postit" && (
+      {!penOn && !activeEditor && sel?.type === "postit" && (
         <div className="formatbar pill">
           <input key={sel.id} className="bar-name" defaultValue={sel.name ?? ""} placeholder="Nombre"
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
@@ -901,7 +917,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       {/* lienzo */}
       <div
         ref={viewport}
-        className={`viewport ${spaceDown || panning ? "panning" : ""} ${pen.on ? (pen.mode === "eraser" ? "eraser-mode" : "pen-mode") : ""}`}
+        className={`viewport ${spaceDown || panning ? "panning" : ""} ${tool === "eraser" ? "eraser-mode" : tool === "pen" ? "pen-mode" : tool === "hand" ? "hand-mode" : ""}`}
         onPointerDownCapture={onPenDown}
         onPointerDown={onBgPointerDown}
         onContextMenu={(e) => e.preventDefault()}
@@ -988,7 +1004,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
                   <div className={`tl-draw ${drawPrev.len >= 0.6 ? "ok" : ""}`} style={{ left: drawPrev.f * it.w, height: drawPrev.len * it.h, top: drawPrev.fromTop ? 0 : undefined, bottom: drawPrev.fromTop ? undefined : 0 }} />
                 )}
                 {it.locked && selIds.includes(it.id) && <div className="lock-badge" title="Bloqueado (Ctrl+L)">🔒</div>}
-                {((selected === it.id && !it.locked) || connecting) && connectable(it) && !pen.on && SIDES.map((sd) => {
+                {((selected === it.id && !it.locked) || connecting) && connectable(it) && !penOn && SIDES.map((sd) => {
                   const a = anchor(it, sd);
                   const off = connecting ? 0 : 16 / cam.z; // el asa se dibuja un poco por fuera para no tapar el borde
                   const ox = sd === "l" ? -off : sd === "r" ? off : 0, oy = sd === "t" ? -off : sd === "b" ? off : 0;
@@ -1098,6 +1114,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
             ["Crear", [["Ctrl+P", "Post-it"], ["Ctrl+E", "Forma"], ["T", "Texto"], ["Ctrl+V", "Pegar imagen o elementos"]]],
             ["Editar", [["Ctrl+Z / Ctrl+Y", "Deshacer / rehacer"], ["Ctrl+C / X / D", "Copiar / cortar / duplicar"], ["Supr", "Eliminar"], ["Intro / Esc", "Editar / terminar"], ["Doble clic", "Editar texto"]]],
             ["Organizar", [["Ctrl+A", "Seleccionar todo"], ["Mayús+clic", "Añadir a la selección"], ["Ctrl+G", "Agrupar (Mayús: desagrupar)"], ["Ctrl+L", "Bloquear"], ["Ctrl+] / Ctrl+[", "Al frente / atrás"], ["Alt al mover", "Sin guías"]]],
+            ["Herramientas", [["H", "Mano (mover el lienzo)"], ["V", "Selección (recuadro)"], ["B", "Rotulador"], ["Mayús+arrastrar", "Recuadro con la mano"], ["Esc", "Volver a la mano"]]],
             ["Ver", [["Ctrl+F", "Buscar"], ["Rueda", "Zoom"], ["Ctrl + / − / 0", "Acercar / alejar / ajustar"], ["Espacio + arrastrar", "Mover el lienzo"], ["Ctrl+S", "Guardar"]]],
           ].map(([title, rows]) => (
             <div key={title as string}>
