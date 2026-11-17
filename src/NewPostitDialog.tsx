@@ -47,10 +47,9 @@ export default function NewPostitDialog({ defaultName, anchor, onCreate, onClose
         <div className="np-label">Tamaño</div>
         <div className="np-sizes">
           {(["s", "l"] as const).map((k) => (
-            <button key={k} className={`np-size ${size === k ? "on" : ""}`} onClick={() => setSize(k)}>
-              <span className="np-size-ico" style={{ width: k === "s" ? 18 : 26, height: k === "s" ? 18 : 26, background: color }} />
-              <span>{k === "s" ? "Pequeño" : "Grande"}</span>
-              <span className="np-size-px">{POSTIT_SIZES[k]} px</span>
+            <button key={k} className={`np-size ${size === k ? "on" : ""}`} onClick={() => setSize(k)}
+              data-tip={`${k === "s" ? "Pequeño" : "Grande"} · ${POSTIT_SIZES[k]} × ${POSTIT_SIZES[k]} px`} aria-label={k === "s" ? "Pequeño" : "Grande"}>
+              <span className="np-size-ico" style={{ width: k === "s" ? 20 : 32, height: k === "s" ? 20 : 32, background: color }} />
             </button>
           ))}
         </div>
