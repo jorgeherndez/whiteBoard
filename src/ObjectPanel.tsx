@@ -71,29 +71,47 @@ export default function ObjectPanel({ item, classes, classUsers, update, onClose
       </div>
 
       <div className="np-label">Clase</div>
-      <select className="np-name obj-select" value={newCls ? "+" : item.classId ?? ""}
-        onChange={(e) => { const v = e.target.value; if (v === "+") setNewCls({ name: "", description: "" }); else { setNewCls(null); const c = classes.find((k) => k.id === v); update({ classId: v || undefined, ...(c ? { color: c.color } : {}) }); } }}>
-        <option value="">Sin clase</option>
-        {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        <option value="+">＋ Nueva clase…</option>
-      </select>
+      <div className="cls-chips">
+        <button className={`cls-chip ${!item.classId && !newCls ? "on" : ""}`} onClick={() => { setNewCls(null); update({ classId: undefined }); }}>Sin clase</button>
+        {classes.map((c) => (
+          <button key={c.id} className={`cls-chip ${item.classId === c.id && !newCls ? "on" : ""}`} title={c.description || c.name}
+            onClick={() => { setNewCls(null); update({ classId: c.id, color: c.color }); }}>
+            <span className="cls-dot" style={{ background: c.color }} />{c.name}
+          </button>
+        ))}
+        <button className={`cls-chip add ${newCls ? "on" : ""}`} onClick={() => setNewCls({ name: "", description: "" })}>＋ Nueva</button>
+      </div>
       {newCls && (
-        <div className="cls-new">
-          <input className="np-name" autoFocus value={newCls.name} placeholder="Nombre de la clase" onChange={(e) => setNewCls({ ...newCls, name: e.target.value })}
+        <div className="cls-card" style={{ "--cc": item.color ?? "#0071e3" } as React.CSSProperties}>
+          <input className="cls-card-name" autoFocus value={newCls.name} placeholder="Nombre de la clase" onChange={(e) => setNewCls({ ...newCls, name: e.target.value })}
             onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); createClass(); } }} />
-          <textarea className="np-name np-desc" rows={2} value={newCls.description} placeholder="Descripción (opcional)" onChange={(e) => setNewCls({ ...newCls, description: e.target.value })} />
-          <div className="np-hint">Los atributos actuales del objeto pasan a ser los de la clase.</div>
-          <div className="np-actions"><button className="np-create small" onClick={createClass}>Crear clase</button></div>
+          <textarea className="cls-card-desc" rows={2} value={newCls.description} placeholder="Descripción (opcional)" onChange={(e) => setNewCls({ ...newCls, description: e.target.value })} />
+          <div className="cls-card-foot">
+            <span>Los atributos actuales pasarán a la clase</span>
+            <button className="np-create small" onClick={createClass}>Crear clase</button>
+          </div>
         </div>
       )}
-      {cls && !newCls && (<>
-        <div className="obj-sub">Clase «{cls.name}» · {users} objeto{users === 1 ? "" : "s"}</div>
-        <input key={cls.id + cls.name} className="np-name obj-cls-name" defaultValue={cls.name} title="Nombre de la clase"
-          onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== cls.name) patchClass({ name: v }); }} />
-        <textarea key={cls.id + cls.description} className="np-name np-desc" rows={2} defaultValue={cls.description} placeholder="Descripción de la clase"
-          onBlur={(e) => { const v = e.target.value.trim(); if (v !== cls.description) patchClass({ description: v }); }} />
-        <div className="np-hint">Los cambios en la clase afectan a todos sus objetos.</div>
-      </>)}
+      {cls && !newCls && (
+        <div className="cls-card" style={{ "--cc": cls.color } as React.CSSProperties}>
+          <div className="cls-card-head">
+            <span className="cls-card-ico" />
+            <input key={cls.id + cls.name} className="cls-card-name" defaultValue={cls.name} title="Nombre de la clase (afecta a todos sus objetos)"
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== cls.name) patchClass({ name: v }); }} />
+          </div>
+          <textarea key={cls.id + cls.description} className="cls-card-desc" rows={2} defaultValue={cls.description} placeholder="Añade una descripción…"
+            onBlur={(e) => { const v = e.target.value.trim(); if (v !== cls.description) patchClass({ description: v }); }} />
+          <div className="cls-card-foot">
+            <span>{users} objeto{users === 1 ? "" : "s"} · {cls.attrs.length} atributo{cls.attrs.length === 1 ? "" : "s"}</span>
+            <span className="cls-card-colors">
+              {OBJECT_COLORS.slice(0, 6).map((c) => (
+                <button key={c} className={`cls-mini ${c === cls.color ? "on" : ""}`} style={{ background: c }} title="Color de la clase"
+                  onClick={() => update({ color: c }, classes.map((k) => (k.id === cls.id ? { ...k, color: c } : k)))} />
+              ))}
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="np-label">Atributos</div>
       {attrs.length === 0 && <div className="np-hint">Sin atributos todavía.</div>}

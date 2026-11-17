@@ -40,7 +40,7 @@ export default function NewShapeDialog({ anchor, onCreate, onClose }: Props) {
         <div className="np-label">Forma</div>
         <div className="ns-grid">
           {options.map((o) => (
-            <button key={o.kind} className={`np-size ns-opt ${kind === o.kind ? "on" : ""}`} data-tip={o.label} aria-label={o.label} onClick={() => setKind(o.kind)}>
+            <button key={o.kind} className={`np-size ns-opt ${kind === o.kind ? "on" : ""}`} data-tip={o.label} aria-label={o.label} onClick={() => setKind(o.kind)} onDoubleClick={() => onCreate({ name: name.trim(), kind: o.kind, color })}>
               <Icon kind={o.kind} color={color} />
             </button>
           ))}
@@ -49,7 +49,7 @@ export default function NewShapeDialog({ anchor, onCreate, onClose }: Props) {
         <div className="np-label">Color</div>
         <div className="np-colors">
           {SHAPE_COLORS.map((c) => (
-            <button key={c} className={`np-color ${c === color ? "on" : ""}`} style={{ background: c }} onClick={() => setColor(c)} aria-label={c} />
+            <button key={c} className={`np-color ${c === color ? "on" : ""}`} style={{ background: c }} onClick={() => setColor(c)} onDoubleClick={() => onCreate({ name: name.trim(), kind, color: c })} aria-label={c} />
           ))}
         </div>
         <div className="np-actions"><button className="np-create" onClick={create}>Crear</button></div>
