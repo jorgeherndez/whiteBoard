@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import RichText from "./RichText";
+import NewPostitDialog, { NewPostit } from "./NewPostitDialog";
 import {
   BoardFile, BoardState, Camera, Item, POSTIT_COLORS, POSTIT_SIZES,
   cleanOrphanImages, imageUrl, loadBoard, saveBoard, storeImage, uid,
@@ -22,7 +23,8 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [lifted, setLifted] = useState<Set<string>>(new Set());
-  const [color, setColor] = useState(POSTIT_COLORS[0]);
+  const [newPostit, setNewPostit] = useState<{ screen: { x: number; y: number }; world?: { x: number; y: number } } | null>(null);
+  const mouseScreen = useRef<{ x: number; y: number } | null>(null);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [saveStatus, setSaveStatus] = useState<"saved" | "pending" | "saving" | "error">("saved");
   const [, force] = useState(0);
@@ -129,8 +131,21 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     if (item.type !== "image") setEditing(item.id);
   };
 
-  const addPostit = (size: "s" | "l", at?: { x: number; y: number }) =>
-    addItem({ type: "postit", w: POSTIT_SIZES[size], h: POSTIT_SIZES[size], color, content: "" }, at);
+  const nextDefaultName = () => {
+    const used = new Set(stateRef.current?.items.map((i) => i.name));
+    let n = 1;
+    while (used.has(`Sin_nombre(${n})`)) n++;
+    return `Sin_nombre(${n})`;
+  };
+  const openNewPostit = (fromMouse: boolean) => {
+    const vp = viewport.current!.getBoundingClientRect();
+    if (fromMouse && mouseScreen.current && mouse.current) setNewPostit({ screen: mouseScreen.current, world: mouse.current });
+    else setNewPostit({ screen: { x: vp.width / 2 - 170, y: vp.height / 2 - 150 } });
+  };
+  const createPostit = (p: NewPostit, at?: { x: number; y: number }) => {
+    const s = POSTIT_SIZES[p.size];
+    addItem({ type: "postit", name: p.name, w: s, h: s, color: p.color, content: "" }, at);
+  };
   const addText = (at?: { x: number; y: number }) => addItem({ type: "text", w: 360, h: 120, content: "" }, at);
 
   const addImages = async (files: FileList | File[], at?: { x: number; y: number }) => {
@@ -195,6 +210,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const onPointerMove = (e: React.PointerEvent) => {
     const r = viewport.current!.getBoundingClientRect();
     const c = camRef.current;
+    mouseScreen.current = { x: e.clientX, y: e.clientY };
     mouse.current = { x: (e.clientX - r.left - c.x) / c.z, y: (e.clientY - r.top - c.y) / c.z };
     const d = drag.current;
     if (!d) return;
@@ -269,12 +285,12 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (e.key === " " && !inField) { setSpaceDown(e.type === "keydown"); e.preventDefault(); return; }
       if (e.type !== "keydown") return;
       const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "p") { e.preventDefault(); if (!newPostit) { setEditing(null); openNewPostit(true); } return; }
       if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); doSave(); return; }
       if (e.key === "Escape") { setEditing(null); return; }
       if (inField) return;
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
-      else if (!mod && !e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); addPostit(e.shiftKey ? "l" : "s", mouse.current ?? undefined); }
       else if (!mod && !e.altKey && e.key.toLowerCase() === "t") { e.preventDefault(); addText(mouse.current ?? undefined); }
       else if (e.key === "Delete" || e.key === "Backspace") removeSelected();
       else if (e.key === "Enter" && selected) { const it = stateRef.current?.items.find((i) => i.id === selected); if (it && it.type !== "image") { e.preventDefault(); setEditing(selected); } }
@@ -323,14 +339,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         <div className="pill tools">
           <button className="tool" title="Texto" onClick={() => addText()}><span className="t-ico">Aa</span>Texto</button>
           <div className="sep" />
-          <button className="tool" title="Post-it pequeño" onClick={() => addPostit("s")}><span className="pi-ico s" style={{ background: color }} />Pequeño</button>
-          <button className="tool" title="Post-it grande" onClick={() => addPostit("l")}><span className="pi-ico l" style={{ background: color }} />Grande</button>
-          <div className="swatches">
-            {POSTIT_COLORS.map((c) => (
-              <button key={c} className={`swatch ${c === color ? "on" : ""}`} style={{ background: c }}
-                onClick={() => { setColor(c); if (sel?.type === "postit") updateItem(sel.id, { color: c }); }} />
-            ))}
-          </div>
+          <button className="tool" title="Nuevo post-it (Ctrl+P)" onClick={() => openNewPostit(false)}><span className="pi-ico l" style={{ background: POSTIT_COLORS[0] }} />Post-it</button>
           <div className="sep" />
           <button className="tool" title="Imagen" onClick={() => fileInput.current?.click()}><span className="t-ico">▣</span>Imagen</button>
           <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { e.target.files && addImages(e.target.files); e.target.value = ""; }} />
@@ -351,10 +360,13 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       {/* ajustes del post-it seleccionado */}
       {!activeEditor && sel?.type === "postit" && (
         <div className="formatbar pill">
-          <span className="bar-label">Post-it</span>
+          <input key={sel.id} className="bar-name" defaultValue={sel.name ?? ""} placeholder="Nombre"
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== sel.name) updateItem(sel.id, { name: v }); }} />
+          <div className="sep" />
           {POSTIT_COLORS.map((c) => (
             <button key={c} className={`swatch ${c === sel.color ? "on" : ""}`} style={{ background: c, margin: "0 2px" }}
-              title="Color" onClick={() => { setColor(c); updateItem(sel.id, { color: c }); }} />
+              title="Color" onClick={() => updateItem(sel.id, { color: c })} />
           ))}
           <div className="sep" />
           {(["s", "l"] as const).map((k) => (
@@ -427,7 +439,12 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
         <div className="sep" />
         <button className="btn small ghost" onClick={fit} title="Ajustar a la hoja (Ctrl 0)">Ajustar</button>
       </div>
-      <div className="hint muted">P: post-it en el ratón (Mayús+P grande) · T: texto · Rueda: zoom · Arrastra el fondo o Espacio: mover · Doble clic: editar</div>
+      {newPostit && (
+        <NewPostitDialog defaultName={nextDefaultName()} anchor={newPostit.screen}
+          onClose={() => setNewPostit(null)}
+          onCreate={(p) => { const at = newPostit.world; setNewPostit(null); createPostit(p, at); }} />
+      )}
+      <div className="hint muted">Ctrl+P: nuevo post-it en el ratón · T: texto · Rueda: zoom · Arrastra el fondo o Espacio: mover · Doble clic: editar</div>
     </div>
   );
 }

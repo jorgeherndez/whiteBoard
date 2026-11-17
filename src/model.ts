@@ -10,6 +10,7 @@ export interface Item {
   w: number;
   h: number;
   color?: string; // post-its
+  name?: string; // post-its: nombre interno
   file?: string; // imágenes: nombre dentro de imagenes/
   content?: string; // textos y post-its: markdown (se guarda en .md aparte)
 }

@@ -15,7 +15,7 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 
 | Tecla | Acción |
 |---|---|
-| P / Mayús+P | Post-it pequeño / grande donde está el ratón |
+| Ctrl+P | Nuevo post-it donde está el ratón (abre el panel: nombre, tamaño y color; Intro = crear) |
 | T | Texto donde está el ratón |
 | Ctrl+Z, Ctrl+Y | Deshacer, rehacer |
 | Ctrl+S | Guardar ya |
@@ -25,7 +25,7 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 | Espacio + arrastrar | Mover el lienzo |
 | Ctrl+V | Pegar imagen |
 
-Al seleccionar un post-it aparece una barra para cambiar su color y tamaño, levantarlo o editarlo.
+Cada post-it tiene un nombre interno (por defecto `Sin_nombre(n)`), guardado en `board.json`. Al seleccionarlo aparece una barra para renombrarlo, cambiar color y tamaño, levantarlo o editarlo.
 
 ## Dónde se guarda
 
