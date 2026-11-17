@@ -175,3 +175,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .np-create:active { transform: scale(.97); }
 .bar-name { border: none; outline: none; background: rgba(0,0,0,.05); border-radius: 8px; padding: 5px 9px; font: inherit; font-size: 13px; font-weight: 500; width: 150px; }
 .bar-name:focus { box-shadow: 0 0 0 3px rgba(0,113,227,.25); }
+.ns-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.ns-opt { width: auto; height: 50px; }
+.ns-ico { display: grid; place-items: center; width: 34px; height: 30px; pointer-events: none; }
+.ns-ico svg { overflow: visible; }
+.ns-text-ico { font-weight: 700; font-size: 17px; }
+.item.shape { cursor: move; }
+.item.shape.line { pointer-events: none; }
+.item.shape.line .hit { pointer-events: stroke; }
+.shape-svg { display: block; overflow: visible; }
+.item.shape.line.selected::before { display: none; }
+.node { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #fff; border: 2px solid var(--accent); cursor: grab; pointer-events: auto; z-index: 3; }
+.shape-name { position: absolute; left: 0; top: -20px; font-size: 12px; color: var(--muted); white-space: nowrap; pointer-events: none; }
+.viewport { user-select: none; -webkit-user-select: none; }
+.viewport .rt.editing, .viewport .rt.editing * { user-select: text; -webkit-user-select: text; }

@@ -1,6 +1,9 @@
 import { fsx } from "./storage";
 
-export type ItemType = "text" | "postit" | "image";
+import { shapeSvg } from "./shapes";
+import type { ShapeKind, Pt } from "./shapes";
+
+export type ItemType = "text" | "postit" | "image" | "shape";
 
 export interface Item {
   id: string;
@@ -10,7 +13,9 @@ export interface Item {
   w: number;
   h: number;
   color?: string; // post-its
-  name?: string; // post-its: nombre interno
+  name?: string; // nombre interno (post-its y figuras)
+  shape?: ShapeKind; // figuras
+  points?: Pt[]; // líneas y flechas: nodos en coordenadas locales
   file?: string; // imágenes: nombre dentro de imagenes/
   content?: string; // textos y post-its: markdown (se guarda en .md aparte)
 }
@@ -100,7 +105,7 @@ export async function loadBoard(dir: string): Promise<{ file: BoardFile; state: 
   const items: Item[] = [];
   for (const it of file.items) {
     const item: Item = { ...it };
-    if (it.type !== "image") item.content = (await fsx.readText(contentPath(dir, item))) ?? "";
+    if (it.type === "text" || it.type === "postit") item.content = (await fsx.readText(contentPath(dir, item))) ?? "";
     items.push(item);
   }
   return { file, state: { sheet: file.sheet, items } };
@@ -111,8 +116,8 @@ export async function saveBoard(dir: string, meta: BoardMeta, state: BoardState,
   const current = new Map<string, string>();
   for (const it of state.items) {
     if (it.type === "image") continue;
-    const p = contentPath(dir, it);
-    const c = it.content ?? "";
+    const p = it.type === "shape" ? `${dir}/formas/${it.id}.svg` : contentPath(dir, it);
+    const c = it.type === "shape" ? shapeSvg(it, true) : it.content ?? "";
     current.set(p, c);
     if (saved.get(p) !== c) await fsx.writeText(p, c);
   }
