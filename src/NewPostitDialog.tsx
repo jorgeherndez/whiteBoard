@@ -47,7 +47,7 @@ export default function NewPostitDialog({ defaultName, anchor, onCreate, onClose
         <div className="np-label">Tamaño</div>
         <div className="np-sizes">
           {(["s", "l"] as const).map((k) => (
-            <button key={k} className={`np-size ${size === k ? "on" : ""}`} onClick={() => setSize(k)}
+            <button key={k} className={`np-size ${size === k ? "on" : ""}`} onClick={() => setSize(k)} onDoubleClick={() => onCreate({ name: name.trim() || defaultName, size: k, color })}
               data-tip={`${k === "s" ? "Pequeño" : "Grande"} · ${POSTIT_SIZES[k]} × ${POSTIT_SIZES[k]} px`} aria-label={k === "s" ? "Pequeño" : "Grande"}>
               <span className="np-size-ico" style={{ width: k === "s" ? 20 : 32, height: k === "s" ? 20 : 32, background: color }} />
             </button>
@@ -57,7 +57,7 @@ export default function NewPostitDialog({ defaultName, anchor, onCreate, onClose
         <div className="np-label">Color</div>
         <div className="np-colors">
           {POSTIT_COLORS.map((c) => (
-            <button key={c} className={`np-color ${c === color ? "on" : ""}`} style={{ background: c }} onClick={() => setColor(c)} aria-label={c} />
+            <button key={c} className={`np-color ${c === color ? "on" : ""}`} style={{ background: c }} onClick={() => setColor(c)} onDoubleClick={() => onCreate({ name: name.trim() || defaultName, size, color: c })} aria-label={c} />
           ))}
         </div>
 

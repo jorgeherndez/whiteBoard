@@ -5,7 +5,7 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 ## Qué hace (v0.1)
 
 - **Menú de pizarras**: crear (nombre y descripción), abrir, editar, duplicar y eliminar.
-- **Lienzo infinito**: fondo gris con una hoja blanca inicial de 1920×1080 que puedes agrandar arrastrando su borde derecho, inferior o la esquina. Rueda del ratón = zoom. Por defecto el ratón es la **mano**: arrastrar el fondo mueve el lienzo y arrastrar un elemento lo mueve. Tras crear cualquier cosa se vuelve a la mano.
+- **Lienzo infinito**: fondo gris con una hoja blanca inicial de 1920×1080 que puedes agrandar arrastrando su borde derecho, inferior o la esquina. Rueda del ratón = zoom. Por defecto el ratón es la **mano**: arrastrar el fondo mueve el lienzo y arrastrar un elemento lo mueve. Tras crear cualquier cosa se vuelve a la mano. **Touchpad**: dos dedos = desplazarse, pellizcar = zoom.
 - **Texto** con formato estilo Obsidian: `# ` títulos, `**negrita**`, `*cursiva*`, `- ` listas, `1. `, `[ ] ` tareas, `> ` citas. Barra de formato al editar.
 - **Post-its** de 6 colores y 2 tamaños. Se pueden **levantar** con la esquina inferior derecha para ver lo que hay debajo (siguen pegados por arriba).
 - **Objetos y relaciones** (Ctrl+O): círculos con nombre (visible u oculto), atributos y clase. Las **clases** (nombre, descripción, atributos y color) se reutilizan entre objetos de la pizarra. Arrastrar desde un punto de un objeto crea una **relación** con símbolos de cardinalidad (uno, cero o uno, muchos, uno o muchos, cero o muchos, flecha) en cada extremo.

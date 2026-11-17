@@ -28,9 +28,9 @@ export default function NewObjectDialog({ anchor, classes, onCreate, onClose }: 
     const c = classes.find((k) => k.id === id);
     if (c) setColor(c.color);
   };
-  const create = () => onCreate({
-    name: name.trim(), color,
-    classId: cls && cls !== "+" ? cls : undefined,
+  const create = (over?: { cls?: string; color?: string }) => onCreate({
+    name: name.trim(), color: over?.color ?? (over?.cls ? classes.find((k) => k.id === over.cls)?.color : undefined) ?? color,
+    classId: (over?.cls ?? cls) && (over?.cls ?? cls) !== "+" ? over?.cls ?? cls : undefined,
     newClass: cls === "+" && clsName.trim() ? { name: clsName.trim(), description: clsDesc.trim() } : undefined,
   });
   const left = Math.min(Math.max(16, anchor.x + 16), window.innerWidth - W - 16);
@@ -47,28 +47,31 @@ export default function NewObjectDialog({ anchor, classes, onCreate, onClose }: 
 
         <div className="np-label">Clase</div>
         <div className="cls-chips">
-          <button className={`cls-chip ${cls === "" ? "on" : ""}`} onClick={() => setCls("")}>Sin clase</button>
+          <button className={`cls-chip ${cls === "" ? "on" : ""}`} onClick={() => setCls("")} onDoubleClick={() => create({ cls: "" })} title="Doble clic para crear">Sin clase</button>
           {classes.map((c) => (
-            <button key={c.id} className={`cls-chip ${cls === c.id ? "on" : ""}`} title={c.description || c.name} onClick={() => pick(c.id)}>
+            <button key={c.id} className={`cls-chip ${cls === c.id ? "on" : ""}`} title={c.description || c.name} onClick={() => pick(c.id)} onDoubleClick={() => create({ cls: c.id })}>
               <span className="cls-dot" style={{ background: c.color }} />{c.name}
             </button>
           ))}
           <button className={`cls-chip add ${cls === "+" ? "on" : ""}`} onClick={() => setCls("+")}>＋ Nueva clase</button>
         </div>
         {cls === "+" && (
-          <div className="cls-new">
-            <input className="np-name" value={clsName} onChange={(e) => setClsName(e.target.value)} placeholder="Nombre de la clase" spellCheck={false} autoFocus />
-            <textarea className="np-name np-desc" value={clsDesc} onChange={(e) => setClsDesc(e.target.value)} placeholder="Descripción (opcional)" rows={2} />
+          <div className="cls-card" style={{ "--cc": color } as React.CSSProperties}>
+            <div className="cls-card-head">
+              <span className="cls-card-ico" />
+              <input className="cls-card-name" value={clsName} onChange={(e) => setClsName(e.target.value)} placeholder="Nombre de la clase" spellCheck={false} autoFocus />
+            </div>
+            <textarea className="cls-card-desc" value={clsDesc} onChange={(e) => setClsDesc(e.target.value)} placeholder="Descripción (opcional)" rows={2} />
           </div>
         )}
 
         <div className="np-label">Color</div>
         <div className="np-colors">
           {OBJECT_COLORS.map((c) => (
-            <button key={c} className={`np-color ${c === color ? "on" : ""}`} style={{ background: c }} onClick={() => setColor(c)} aria-label={c} />
+            <button key={c} className={`np-color ${c === color ? "on" : ""}`} style={{ background: c }} onClick={() => setColor(c)} onDoubleClick={() => create({ color: c })} aria-label={c} />
           ))}
         </div>
-        <div className="np-actions"><button className="np-create" onClick={create}>Crear</button></div>
+        <div className="np-actions"><button className="np-create" onClick={() => create()}>Crear</button></div>
       </div>
     </div>
   );

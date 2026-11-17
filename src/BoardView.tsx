@@ -340,18 +340,27 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     zoomAt(factor, vp.width / 2, vp.height / 2);
   };
 
+  const wheelRef = useRef({ t: 0, pad: false });
   useEffect(() => {
     const el = viewport.current!;
     const onWheel = (e: WheelEvent) => {
       if (editing && (e.target as HTMLElement).closest(".rt.editing") && !e.ctrlKey) return;
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      if (e.ctrlKey || !e.shiftKey) {
-        // rueda = zoom (pellizco del trackpad llega con ctrlKey)
-        const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
-        zoomAt(factor, e.clientX - r.left, e.clientY - r.top);
-      } else {
+      // touchpad: dos dedos = desplazar, pellizcar = zoom (llega con ctrlKey). Ratón: rueda = zoom.
+      // Los touchpads mandan pasos pequeños o con componente horizontal; la rueda, saltos grandes.
+      const now = performance.now(), w = wheelRef.current;
+      const looksPad = e.deltaMode === 0 && (e.deltaX !== 0 || Math.abs(e.deltaY) < 40);
+      w.pad = now - w.t > 250 ? looksPad : w.pad || looksPad; // dentro del mismo gesto no cambia de modo
+      w.t = now;
+      if (e.ctrlKey) {
+        zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+      } else if (w.pad) {
+        setCam((c) => ({ ...c, x: c.x - e.deltaX, y: c.y - e.deltaY }));
+      } else if (e.shiftKey) {
         setCam((c) => ({ ...c, x: c.x - e.deltaY, y: c.y - e.deltaX }));
+      } else {
+        zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
       }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
