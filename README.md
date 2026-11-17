@@ -33,7 +33,9 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 | Alt al mover | Desactiva las guías magnéticas |
 
 - **Flechas conectadas**: al seleccionar cualquier elemento salen 4 puntos (centro de cada lado); arrastra desde uno para crear una flecha unida. Los extremos de cualquier flecha o línea se enganchan al soltarlos cerca de un punto, y siguen al elemento al moverlo.
-- **Rotulador**: botón «Rotulador», 3 grosores y 4 colores (negro, azul, verde, rojo). Cada trazo se guarda como SVG.
+- **Rotulador**: botón «Rotulador», 3 grosores y 4 colores (negro, azul, verde, rojo). Solo pinta dentro de la hoja. Cada trazo se guarda como SVG. **Goma**: arrastra sobre un trazo para borrarlo.
+- **Hoja**: se redimensiona desde cualquier borde o esquina (mínimo 400 × 300). Si al reducirla queda dibujo fuera, no se borra: se oculta y vuelve a verse al agrandarla. El candado junto al tamaño bloquea el redimensionado.
+- **Atajos**: botón del teclado abajo a la derecha.
 - **Clic derecho** sobre un elemento: copiar, duplicar, orden, «siempre al frente» (post-its y timelines), agrupar, bloquear y eliminar.
 
 ## Dónde se guarda

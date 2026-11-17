@@ -37,7 +37,8 @@ export interface Conn { id: string; side: Side }
 
 export interface Segment { color: string; label?: string; textColor?: string }
 
-export interface Sheet { w: number; h: number }
+export interface Sheet { w: number; h: number; x?: number; y?: number; locked?: boolean }
+export const SHEET_MIN = { w: 400, h: 300 };
 export interface Camera { x: number; y: number; z: number }
 
 export interface BoardMeta {
