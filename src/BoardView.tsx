@@ -7,7 +7,7 @@ import { SHAPE_COLORS, addNode, isLineKind, isStrokeKind, shapeDefaults, shapeSv
 import { SIDES, anchor, connectable, nearestAnchor, resolveLines, worldBox } from "./connect";
 import { fsx } from "./storage";
 import {
-  BoardFile, BoardState, Camera, Item, POSTIT_COLORS, POSTIT_SIZES,
+  BoardFile, BoardState, Camera, Item, POSTIT_COLORS, POSTIT_SIZES, SHEET_MIN, Sheet,
   Side, cleanOrphanImages, imageUrl, loadBoard, saveBoard, storeImage, uid,
 } from "./model";
 
@@ -33,7 +33,22 @@ type Drag =
   | { kind: "divider"; id: string; idx: number; sx: number; sy: number; ox: number; base: BoardState }
   | { kind: "draw"; id: string; sx: number; sy: number; f: number; fromTop: boolean; base: BoardState }
   | { kind: "resize"; id: string; sx: number; sy: number; ow: number; oh: number; ratio?: number; base: BoardState }
-  | { kind: "sheet"; edge: "r" | "b" | "rb"; sx: number; sy: number; ow: number; oh: number; base: BoardState };
+  | { kind: "sheet"; edge: Edge; sx: number; sy: number; o: Required<Pick<Sheet, "x" | "y" | "w" | "h">>; base: BoardState }
+  | { kind: "erase"; sx: number; sy: number };
+
+type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+const EDGES: Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+const sheetRect = (sh: Sheet) => ({ x: sh.x ?? 0, y: sh.y ?? 0, w: sh.w, h: sh.h });
+const sheetClip = (sh: Sheet, ox = 0, oy = 0) => {
+  const r = sheetRect(sh);
+  const x0 = r.x - ox, y0 = r.y - oy, x1 = x0 + r.w, y1 = y0 + r.h;
+  return `polygon(${x0}px ${y0}px, ${x1}px ${y0}px, ${x1}px ${y1}px, ${x0}px ${y1}px)`;
+};
+function segDist(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) {
+  const dx = b.x - a.x, dy = b.y - a.y, l = dx * dx + dy * dy;
+  const t = l ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l)) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
 
 export default function BoardView({ dir, onClose }: { dir: string; onClose: () => void }) {
   const [meta, setMeta] = useState<BoardFile | null>(null);
@@ -45,7 +60,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [snapTarget, setSnapTarget] = useState<{ x: number; y: number } | null>(null);
-  const [pen, setPen] = useState<{ on: boolean; color: string; size: number }>({ on: false, color: PEN_COLORS[1], size: PEN_SIZES[1] });
+  const [pen, setPen] = useState<{ on: boolean; mode: "pen" | "eraser"; color: string; size: number }>({ on: false, mode: "pen", color: PEN_COLORS[1], size: PEN_SIZES[1] });
+  const [erasing, setErasing] = useState<Set<string>>(new Set());
+  const [panning, setPanning] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
   const [stroke, setStroke] = useState<{ x: number; y: number }[] | null>(null);
   const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
   const [connDrag, setConnDrag] = useState(false);
@@ -91,9 +109,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     });
   }, [dir]);
 
-  const fitCam = (sheet: { w: number; h: number }, vp: DOMRect): Camera => {
-    const z = clampZ(Math.min((vp.width - 160) / sheet.w, (vp.height - 200) / sheet.h));
-    return { z, x: (vp.width - sheet.w * z) / 2, y: (vp.height - sheet.h * z) / 2 + 20 };
+  const fitCam = (sheet: Sheet, vp: DOMRect): Camera => {
+    const r = sheetRect(sheet);
+    const z = clampZ(Math.min((vp.width - 160) / r.w, (vp.height - 200) / r.h));
+    return { z, x: (vp.width - r.w * z) / 2 - r.x * z, y: (vp.height - r.h * z) / 2 + 20 - r.y * z };
   };
 
   // ---------- historial ----------
@@ -394,10 +413,16 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       const h = d.ratio ? w * d.ratio : Math.max(40, d.oh + dy);
       updateItem(d.id, { w: Math.round(w), h: Math.round(h) }, false);
     } else if (d.kind === "sheet") {
-      const s = stateRef.current!;
-      const w = d.edge !== "b" ? Math.max(200, Math.round(d.ow + dx)) : d.ow;
-      const h = d.edge !== "r" ? Math.max(200, Math.round(d.oh + dy)) : d.oh;
-      setState({ ...s, sheet: { w, h } });
+      // como una forma de PowerPoint: cada borde/esquina mueve su lado, con tamaño mínimo
+      const s = stateRef.current!, o = d.o;
+      let { x, y, w, h } = o;
+      if (d.edge.includes("e")) w = Math.max(SHEET_MIN.w, o.w + dx);
+      if (d.edge.includes("s")) h = Math.max(SHEET_MIN.h, o.h + dy);
+      if (d.edge.includes("w")) { w = Math.max(SHEET_MIN.w, o.w - dx); x = o.x + o.w - w; }
+      if (d.edge.includes("n")) { h = Math.max(SHEET_MIN.h, o.h - dy); y = o.y + o.h - h; }
+      setState({ ...s, sheet: { ...s.sheet, x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) } });
+    } else if (d.kind === "erase") {
+      eraseAt(mouse.current!);
     }
   };
 
@@ -406,11 +431,20 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     drag.current = null;
     setGuides({ v: [], h: [] });
     setConnDrag(false);
+    setPanning(false);
     if (d?.kind === "marquee") { setMarquee(null); return; }
+    if (d?.kind === "erase") {
+      const ids = [...erasing];
+      setErasing(new Set());
+      if (ids.length) commit({ ...stateRef.current!, items: stateRef.current!.items.filter((i) => !ids.includes(i.id)) });
+      return;
+    }
     if (d?.kind === "pen") {
       const pts = stroke;
       setStroke(null);
-      if (pts && pts.length) {
+      const r = sheetRect(stateRef.current!.sheet);
+      const inside = (p: { x: number; y: number }) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+      if (pts && pts.length && pts.some(inside)) {
         const minX = Math.min(...pts.map((p) => p.x)), minY = Math.min(...pts.map((p) => p.y));
         const w = Math.max(...pts.map((p) => p.x)) - minX, h = Math.max(...pts.map((p) => p.y)) - minY;
         const item: Item = { id: uid(), type: "shape", shape: "pen", color: pen.color, strokeWidth: pen.size, x: minX, y: minY, w, h,
@@ -461,6 +495,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   const startPan = (e: React.PointerEvent) => {
     viewport.current!.setPointerCapture(e.pointerId);
     drag.current = { kind: "pan", sx: e.clientX, sy: e.clientY, cam };
+    setPanning(true);
   };
 
   const onBgPointerDown = (e: React.PointerEvent) => {
@@ -476,8 +511,25 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
   };
 
   /** Con el rotulador activo, se dibuja encima de todo */
+  const eraseAt = (p: { x: number; y: number }) => {
+    const rad = 10 / camRef.current.z;
+    const hit = stateRef.current!.items.filter((it) => it.type === "shape" && it.shape === "pen" && !it.locked && it.points?.some((q, i, arr) =>
+      segDist({ x: p.x - it.x, y: p.y - it.y }, q, arr[Math.min(i + 1, arr.length - 1)]) <= rad + (it.strokeWidth ?? 4) / 2));
+    if (hit.length) setErasing((s) => { const n = new Set(s); hit.forEach((h) => n.add(h.id)); return n; });
+  };
+
   const onPenDown = (e: React.PointerEvent) => {
     if (!pen.on || e.button !== 0 || spaceDown) return;
+    if (pen.mode === "eraser") {
+      e.stopPropagation(); e.preventDefault();
+      viewport.current!.setPointerCapture(e.pointerId);
+      const r = viewport.current!.getBoundingClientRect(), c = camRef.current;
+      const p = { x: (e.clientX - r.left - c.x) / c.z, y: (e.clientY - r.top - c.y) / c.z };
+      mouse.current = p;
+      drag.current = { kind: "erase", sx: e.clientX, sy: e.clientY };
+      eraseAt(p);
+      return;
+    }
     e.stopPropagation();
     e.preventDefault();
     viewport.current!.setPointerCapture(e.pointerId);
@@ -582,12 +634,19 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
     drag.current = { kind: "draw", id: it.id, sx: e.clientX, sy: e.clientY, f: (e.clientX - r.left) / r.width, fromTop, base: stateRef.current! };
     setSelDiv(null);
   };
-  const onSheetHandle = (e: React.PointerEvent, edge: "r" | "b" | "rb") => {
+  const onSheetHandle = (e: React.PointerEvent, edge: Edge) => {
     e.stopPropagation();
-    viewport.current!.setPointerCapture(e.pointerId);
+    if (e.button !== 0) return;
     const s = stateRef.current!;
-    drag.current = { kind: "sheet", edge, sx: e.clientX, sy: e.clientY, ow: s.sheet.w, oh: s.sheet.h, base: s };
+    if (s.sheet.locked) return;
+    viewport.current!.setPointerCapture(e.pointerId);
+    drag.current = { kind: "sheet", edge, sx: e.clientX, sy: e.clientY, o: sheetRect(s.sheet), base: s };
   };
+  const toggleSheetLock = () => {
+    const s = stateRef.current!;
+    commit({ ...s, sheet: { ...s.sheet, locked: !s.sheet.locked || undefined } });
+  };
+
 
   // ---------- teclado ----------
   useEffect(() => {
@@ -600,7 +659,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       if (mod && e.key.toLowerCase() === "e") { e.preventDefault(); if (!newShape) { setEditing(null); openNewShape(true); } return; }
       if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); setSearch((s) => s ?? { q: "", idx: 0 }); setTimeout(() => (document.querySelector(".search-input") as HTMLInputElement | null)?.select(), 0); return; }
       if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); doSave(); return; }
-      if (e.key === "Escape") { setEditing(null); if (!inField) { setPen((p) => ({ ...p, on: false })); setSelIds([]); } return; }
+      if (e.key === "Escape") { setEditing(null); if (!inField) { setPen((p) => ({ ...p, on: false })); setSelIds([]); setShowKeys(false); } return; }
       if (inField) return;
       const k = e.key.toLowerCase();
       if (mod && k === "a") { e.preventDefault(); setSelIds(stateRef.current!.items.map((i) => i.id)); return; }
@@ -690,8 +749,10 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           <button className="tool" title="Nuevo post-it (Ctrl+P)" onClick={() => openNewPostit(false)}><span className="pi-ico l" style={{ background: POSTIT_COLORS[0] }} />Post-it</button>
           <div className="sep" />
           <button className="tool" title="Nueva forma (Ctrl+E)" onClick={() => openNewShape(false)}><span className="t-ico">◇</span>Forma</button>
-          <button className={`tool ${pen.on ? "on" : ""}`} title="Rotulador (Esc para salir)" onClick={() => setPen((p) => ({ ...p, on: !p.on }))}>
+          <button className={`tool ${pen.on && pen.mode === "pen" ? "on" : ""}`} title="Rotulador (Esc para salir)" onClick={() => setPen((p) => ({ ...p, on: !(p.on && p.mode === "pen"), mode: "pen" }))}>
             <svg width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3-7.5 7.5H3v-3z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M3 13l-.5 1.5" stroke={pen.color} strokeWidth="2.4" strokeLinecap="round" /></svg>Rotulador</button>
+          <button className={`tool ${pen.on && pen.mode === "eraser" ? "on" : ""}`} title="Goma: borra trazos del rotulador (Esc para salir)" onClick={() => setPen((p) => ({ ...p, on: !(p.on && p.mode === "eraser"), mode: "eraser" }))}>
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6 13.5h8M2.8 9.6l6.4-6.4a1.4 1.4 0 012 0l2.6 2.6a1.4 1.4 0 010 2L8 13.5H5.6L2.8 10.7a.8.8 0 010-1.1z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><path d="M5.5 6.9l4.6 4.6" stroke="currentColor" strokeWidth="1.3" /></svg>Goma</button>
           <button className="tool" title="Imagen" onClick={() => fileInput.current?.click()}><span className="t-ico">▣</span>Imagen</button>
           <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { e.target.files && addImages(e.target.files); e.target.value = ""; }} />
         </div>
@@ -709,7 +770,14 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       {activeEditor && <FormatBar editor={activeEditor} />}
 
       {/* rotulador */}
-      {pen.on && (
+      {pen.on && pen.mode === "eraser" && (
+        <div className="formatbar pill pen-bar">
+          <span className="bar-label">Goma · arrastra sobre los trazos para borrarlos</span>
+          <div className="sep" />
+          <button className="fmt" style={{ padding: "0 10px" }} onClick={() => setPen((p) => ({ ...p, on: false }))}>Listo</button>
+        </div>
+      )}
+      {pen.on && pen.mode === "pen" && (
         <div className="formatbar pill pen-bar">
           <span className="bar-label">Rotulador</span>
           {PEN_SIZES.map((sz) => (
@@ -828,7 +896,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       {/* lienzo */}
       <div
         ref={viewport}
-        className={`viewport ${spaceDown ? "panning" : ""} ${pen.on ? "pen-mode" : ""}`}
+        className={`viewport ${spaceDown || panning ? "panning" : ""} ${pen.on ? (pen.mode === "eraser" ? "eraser-mode" : "pen-mode") : ""}`}
         onPointerDownCapture={onPenDown}
         onPointerDown={onBgPointerDown}
         onContextMenu={(e) => e.preventDefault()}
@@ -841,11 +909,18 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
       >
         {state && (
           <div className="world" style={{ transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})` }}>
-            <div className="sheet" style={{ width: state.sheet.w, height: state.sheet.h }}>
-              <div className="sheet-handle r" onPointerDown={(e) => onSheetHandle(e, "r")} />
-              <div className="sheet-handle b" onPointerDown={(e) => onSheetHandle(e, "b")} />
-              <div className="sheet-handle rb" onPointerDown={(e) => onSheetHandle(e, "rb")} />
-              <div className="sheet-size" style={{ fontSize: 12 / cam.z }}>{state.sheet.w} × {state.sheet.h}</div>
+            <div className={`sheet ${state.sheet.locked ? "locked" : ""}`} style={{ left: state.sheet.x ?? 0, top: state.sheet.y ?? 0, width: state.sheet.w, height: state.sheet.h, "--hz": 1 / cam.z } as React.CSSProperties}>
+              {!state.sheet.locked && EDGES.map((ed) => <div key={ed} className={`sheet-handle ${ed}`} onPointerDown={(e) => onSheetHandle(e, ed)} />)}
+              <div className="sheet-info" style={{ fontSize: 12 / cam.z }}>
+                <span className="sheet-size">{state.sheet.w} × {state.sheet.h}</span>
+                <button className={`sheet-lock ${state.sheet.locked ? "on" : ""}`} title={state.sheet.locked ? "Tamaño bloqueado · clic para desbloquear" : "Bloquear el tamaño de la pizarra"}
+                  onPointerDown={(e) => e.stopPropagation()} onClick={toggleSheetLock}>
+                  <svg viewBox="0 0 16 16" width="1.15em" height="1.15em">
+                    <rect x="3" y="7" width="10" height="7.5" rx="1.8" fill="currentColor" />
+                    <path d={state.sheet.locked ? "M5.2 7V5a2.8 2.8 0 015.6 0v2" : "M5.2 7V5a2.8 2.8 0 015.5-.7"} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {ordered.map((it) => (
@@ -854,7 +929,9 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
                 data-id={it.id}
                 className={`item ${it.type} ${isStrokeKind(it.shape) ? "line" : ""} ${selIds.includes(it.id) ? "selected" : ""} ${editing === it.id ? "is-editing" : ""} ${it.locked ? "locked" : ""} ${matches.includes(it.id) ? (it.id === current ? "hit current" : "hit") : ""}`}
                 onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); if (!selIds.includes(it.id)) setSelIds(withGroups([it.id])); setItemMenu({ x: e.clientX, y: e.clientY }); }}
-                style={{ left: it.x, top: it.y, width: it.w, height: it.type === "text" ? undefined : it.h, minHeight: it.type === "text" ? it.h : undefined }}
+                data-erasing={erasing.has(it.id) || undefined}
+                style={{ left: it.x, top: it.y, width: it.w, height: it.type === "text" ? undefined : it.h, minHeight: it.type === "text" ? it.h : undefined,
+                  clipPath: it.shape === "pen" ? sheetClip(state.sheet, it.x, it.y) : undefined }}
                 onPointerDown={(e) => onItemPointerDown(e, it)}
                 onDoubleClick={(e) => { e.stopPropagation(); if (it.type === "text" || it.type === "postit") setEditing(it.id); }}
               >
@@ -922,7 +999,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
             {guides.h.map((y, i) => <div key={"h" + i} className="guide h" style={{ top: y, borderTopWidth: 1 / cam.z }} />)}
             {marquee && <div className="marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h, borderWidth: 1 / cam.z }} />}
             {stroke && (
-              <svg className="live-stroke" overflow="visible" width="1" height="1">
+              <svg className="live-stroke" overflow="visible" width="1" height="1" style={{ clipPath: sheetClip(state.sheet) }}>
                 <polyline points={stroke.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke={pen.color} strokeWidth={pen.size} strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
@@ -1002,7 +1079,29 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           onClose={() => setNewPostit(null)}
           onCreate={(p) => { const at = newPostit.world; setNewPostit(null); createPostit(p, at); }} />
       )}
-      <div className="hint muted">Ctrl+P: post-it · Ctrl+E: forma · Ctrl+F: buscar · Arrastra el fondo: seleccionar · T: texto · Rueda: zoom · Espacio, botón central o derecho: mover · Doble clic: editar</div>
+      <button className={`keys-btn ${showKeys ? "on" : ""}`} title="Atajos de teclado" onClick={() => setShowKeys((v) => !v)}>
+        <svg viewBox="0 0 20 20" width="18" height="18"><rect x="2" y="5" width="16" height="10.5" rx="2.4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M5.5 8.4h.01M8.5 8.4h.01M11.5 8.4h.01M14.5 8.4h.01M6.5 12.2h7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>
+      </button>
+      {showKeys && (
+        <div className="keys-panel">
+          <button className="np-close" title="Cerrar" onClick={() => setShowKeys(false)} aria-label="Cerrar">
+            <svg viewBox="0 0 10 10" width="8" height="8"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" /></svg>
+          </button>
+          <div className="np-seg-title">Atajos</div>
+          {[
+            ["Crear", [["Ctrl+P", "Post-it"], ["Ctrl+E", "Forma"], ["T", "Texto"], ["Ctrl+V", "Pegar imagen o elementos"]]],
+            ["Editar", [["Ctrl+Z / Ctrl+Y", "Deshacer / rehacer"], ["Ctrl+C / X / D", "Copiar / cortar / duplicar"], ["Supr", "Eliminar"], ["Intro / Esc", "Editar / terminar"], ["Doble clic", "Editar texto"]]],
+            ["Organizar", [["Ctrl+A", "Seleccionar todo"], ["Mayús+clic", "Añadir a la selección"], ["Ctrl+G", "Agrupar (Mayús: desagrupar)"], ["Ctrl+L", "Bloquear"], ["Ctrl+] / Ctrl+[", "Al frente / atrás"], ["Alt al mover", "Sin guías"]]],
+            ["Ver", [["Ctrl+F", "Buscar"], ["Rueda", "Zoom"], ["Ctrl + / − / 0", "Acercar / alejar / ajustar"], ["Espacio + arrastrar", "Mover el lienzo"], ["Ctrl+S", "Guardar"]]],
+          ].map(([title, rows]) => (
+            <div key={title as string}>
+              <div className="np-label">{title as string}</div>
+              {(rows as string[][]).map(([k, v]) => <div key={k} className="key-row"><span>{v}</span><kbd>{k}</kbd></div>)}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

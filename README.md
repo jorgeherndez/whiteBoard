@@ -33,7 +33,9 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 | Alt al mover | Desactiva las guías magnéticas |
 
 - **Flechas conectadas**: al seleccionar cualquier elemento salen 4 puntos (centro de cada lado); arrastra desde uno para crear una flecha unida. Los extremos de cualquier flecha o línea se enganchan al soltarlos cerca de un punto, y siguen al elemento al moverlo.
-- **Rotulador**: botón «Rotulador», 3 grosores y 4 colores (negro, azul, verde, rojo). Cada trazo se guarda como SVG.
+- **Rotulador**: botón «Rotulador», 3 grosores y 4 colores (negro, azul, verde, rojo). Solo pinta dentro de la hoja. Cada trazo se guarda como SVG. **Goma**: arrastra sobre un trazo para borrarlo.
+- **Hoja**: se redimensiona desde cualquier borde o esquina (mínimo 400 × 300). Si al reducirla queda dibujo fuera, no se borra: se oculta y vuelve a verse al agrandarla. El candado junto al tamaño bloquea el redimensionado.
+- **Atajos**: botón del teclado abajo a la derecha.
 - **Clic derecho** sobre un elemento: copiar, duplicar, orden, «siempre al frente» (post-its y timelines), agrupar, bloquear y eliminar.
 
 ## Dónde se guarda
@@ -54,7 +56,15 @@ formas/<id>.svg   cada forma/flecha como SVG
 2. Abajo, en **Artifacts**, descarga `WhiteBoard-instalador-windows` (un .zip).
 3. Dentro hay un `.exe` (recomendado) y un `.msi`. Ejecútalo. Windows puede avisar de "editor desconocido": *Más información → Ejecutar de todas formas*.
 
-Para versiones fijas: crea una etiqueta `v0.1.0` y el instalador aparecerá en **Releases**.
+Para versiones fijas: crea una etiqueta `v0.2.0` (igual que `version` en `src-tauri/tauri.conf.json`) y el instalador aparecerá en **Releases**.
+
+### Actualizaciones automáticas
+
+Desde la 0.2.0, al abrir la app se comprueba si hay una Release más nueva en GitHub y aparece un aviso «Nueva versión · Actualizar». Requisitos:
+
+- El repositorio debe ser **público** (la app descarga `latest.json` de las Releases).
+- El secreto `TAURI_SIGNING_PRIVATE_KEY` debe estar en *Settings → Secrets and variables → Actions*. Sin él, el workflow compila pero no genera los archivos firmados.
+- Cada versión nueva: subir `version` en `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` y `package.json`, y crear la etiqueta `vX.Y.Z`.
 
 ## Desarrollo
 
