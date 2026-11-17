@@ -1,7 +1,7 @@
 // Figuras: se dibujan como SVG y además se guardan como archivo .svg en formas/
 import type { Item } from "./model";
 
-export type ShapeKind = "rect" | "rounded" | "ellipse" | "triangle" | "diamond" | "line" | "arrow" | "arrow2" | "curve";
+export type ShapeKind = "rect" | "rounded" | "ellipse" | "triangle" | "diamond" | "line" | "arrow" | "arrow2" | "curve" | "pen";
 
 export const SHAPES: { kind: ShapeKind; label: string }[] = [
   { kind: "arrow", label: "Flecha" },
@@ -17,6 +17,7 @@ export const SHAPES: { kind: ShapeKind; label: string }[] = [
 
 export const SHAPE_COLORS = ["#1d1d1f", "#8e8e93", "#0071e3", "#ff3b30", "#34c759", "#ff9f0a", "#af52de", "#ffe066"];
 
+export const isStrokeKind = (k?: ShapeKind) => k === "pen" || isLineKind(k);
 export const isLineKind = (k?: ShapeKind) => k === "line" || k === "arrow" || k === "arrow2" || k === "curve";
 
 export interface Pt { x: number; y: number }
@@ -51,7 +52,15 @@ function head(tip: Pt, from: Pt, color: string, sw: number) {
 export function shapeSvg(it: Item, standalone = false): string {
   const c = it.color ?? "#1d1d1f", sw = 3, k = it.shape as ShapeKind;
   let body = "";
-  if (isLineKind(k)) {
+  if (k === "pen") {
+    const p = (it.points ?? []) as Pt[], w = it.strokeWidth ?? 4;
+    let d = p.length ? `M${p[0].x},${p[0].y}` : "";
+    for (let i = 1; i < p.length - 1; i++) d += ` Q${p[i].x},${p[i].y} ${(p[i].x + p[i + 1].x) / 2},${(p[i].y + p[i + 1].y) / 2}`;
+    if (p.length > 1) d += ` L${p[p.length - 1].x},${p[p.length - 1].y}`;
+    else if (p.length === 1) d += ` l0.01,0`;
+    body += `<path class="hit" d="${d}" fill="none" stroke="transparent" stroke-width="${Math.max(16, w + 10)}" stroke-linecap="round"/>`;
+    body += `<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  } else if (isLineKind(k)) {
     const p = (it.points ?? []) as Pt[];
     const d = k === "curve" ? smoothPath(p) : `M${p.map((q) => `${q.x},${q.y}`).join(" L")}`;
     body += `<path class="hit" d="${d}" fill="none" stroke="transparent" stroke-width="18"/>`;

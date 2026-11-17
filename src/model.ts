@@ -16,6 +16,14 @@ export interface Item {
   name?: string; // nombre interno (post-its y figuras)
   shape?: ShapeKind; // figuras
   points?: Pt[]; // líneas y flechas: nodos en coordenadas locales
+  // organización
+  groupId?: string;
+  locked?: boolean;
+  pinned?: boolean; // post-its y timelines: siempre al frente
+  // flechas y líneas conectadas: extremo unido al punto medio de un lado de otro elemento
+  startConn?: Conn;
+  endConn?: Conn;
+  strokeWidth?: number; // rotulador
   // timeline
   titlePos?: "top" | "bottom" | "none";
   dividers?: number[]; // posiciones de las líneas verticales (0..1)
@@ -23,6 +31,9 @@ export interface Item {
   file?: string; // imágenes: nombre dentro de imagenes/
   content?: string; // textos y post-its: markdown (se guarda en .md aparte)
 }
+
+export type Side = "t" | "r" | "b" | "l";
+export interface Conn { id: string; side: Side }
 
 export interface Segment { color: string; label?: string; textColor?: string }
 

@@ -15,18 +15,26 @@ Pizarra blanca personal, minimalista, para Windows. Hecha con **Tauri 2 + React 
 
 | Tecla | Acción |
 |---|---|
-| Ctrl+P | Nuevo post-it donde está el ratón (abre el panel: nombre, tamaño y color; Intro = crear) |
-| Ctrl+F | Nueva forma donde está el ratón (flechas, líneas, curvas con nodos, figuras, campo de texto, timeline) |
+| Ctrl+P | Nuevo post-it donde está el ratón (panel: nombre, tamaño y color; Intro = crear) |
+| Ctrl+E | Nueva forma donde está el ratón (flechas, líneas, curvas, figuras, campo de texto, timeline) |
+| Ctrl+F | Buscar texto en la pizarra (Intro = siguiente) |
 | T | Texto donde está el ratón |
+| Arrastrar el fondo · Mayús+clic | Seleccionar varios |
+| Ctrl+A / Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+D | Todo / copiar / pegar / cortar / duplicar |
+| Ctrl+G / Ctrl+Mayús+G | Agrupar / desagrupar |
+| Ctrl+L | Bloquear / desbloquear |
+| Ctrl+] / Ctrl+[ | Traer al frente / enviar atrás |
 | Ctrl+Z, Ctrl+Y | Deshacer, rehacer |
 | Ctrl+S | Guardar ya |
-| Supr | Eliminar seleccionado |
-| Intro / Esc | Editar / terminar de editar |
+| Supr | Eliminar selección |
+| Intro / Esc | Editar / terminar (Esc también sale del rotulador) |
 | Ctrl + / − / 0 | Acercar / alejar / ajustar a la hoja |
-| Espacio + arrastrar | Mover el lienzo |
-| Ctrl+V | Pegar imagen |
+| Espacio, botón central o derecho + arrastrar | Mover el lienzo |
+| Alt al mover | Desactiva las guías magnéticas |
 
-Cada post-it tiene un nombre interno (por defecto `Sin_nombre(n)`), guardado en `board.json`. Al seleccionarlo aparece una barra para renombrarlo, cambiar color y tamaño, levantarlo o editarlo.
+- **Flechas conectadas**: al seleccionar cualquier elemento salen 4 puntos (centro de cada lado); arrastra desde uno para crear una flecha unida. Los extremos de cualquier flecha o línea se enganchan al soltarlos cerca de un punto, y siguen al elemento al moverlo.
+- **Rotulador**: botón «Rotulador», 3 grosores y 4 colores (negro, azul, verde, rojo). Cada trazo se guarda como SVG.
+- **Clic derecho** sobre un elemento: copiar, duplicar, orden, «siempre al frente» (post-its y timelines), agrupar, bloquear y eliminar.
 
 ## Dónde se guarda
 
