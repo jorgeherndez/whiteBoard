@@ -767,7 +767,7 @@ export default function BoardView({ dir, onClose }: { dir: string; onClose: () =
           <button className="icon-btn" title="Rehacer (Ctrl+Y)" disabled={!future.current.length} onClick={redo}>↷</button>
           <div className="sep" />
           <button className="icon-btn" title="Eliminar seleccionado (Supr)" disabled={!selIds.length} onClick={removeSelected}>⌫</button>
-          <button className="btn small" title="Guardar (Ctrl+S)" onClick={doSave}>{saveStatus === "saved" ? "Guardado" : "Guardar"}</button>
+          <button className="btn small save-btn" title="Guardar (Ctrl+S)" onClick={doSave}>{saveStatus === "saved" ? "Guardado" : "Guardar"}</button>
         </div>
       </div>
 
